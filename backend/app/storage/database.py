@@ -46,6 +46,11 @@ class Database:
                     execution_status TEXT NOT NULL,
                     exit_code INTEGER NOT NULL,
                     duration_ms REAL NOT NULL,
+                    start_time TEXT,
+                    end_time TEXT,
+                    test_names TEXT,
+                    concise_output TEXT,
+                    finding_ids TEXT,
                     summary TEXT NOT NULL,
                     code_fingerprint TEXT NOT NULL,
                     test_fingerprint TEXT NOT NULL,
@@ -83,4 +88,12 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_findings_req ON findings(requirement_id);
                 """
             )
+
+            # Defensive migration for verification_runs columns
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(verification_runs);")
+            existing_cols = {row["name"] for row in cursor.fetchall()}
+            for col in ["start_time", "end_time", "test_names", "concise_output", "finding_ids"]:
+                if col not in existing_cols:
+                    conn.execute(f"ALTER TABLE verification_runs ADD COLUMN {col} TEXT DEFAULT '';")
             conn.commit()

@@ -83,6 +83,20 @@ class TestPaymentTransfers:
 
         assert payment_service.get_account("ACC-SAME").balance == Decimal("10000")
 
+    @pytest.mark.requirement("PAYMENT-004")
+    def test_insufficient_balance_rejected_and_balances_unchanged(
+        self, payment_service: PaymentService
+    ) -> None:
+        """Ordinary check: transfer exceeding available balance is rejected without balance change."""
+        payment_service.create_account("SRC-01", "Sender", 500)
+        payment_service.create_account("DST-01", "Recipient", 100)
+
+        with pytest.raises(InsufficientFundsError):
+            payment_service.transfer("SRC-01", "DST-01", 600)
+
+        assert payment_service.get_account("SRC-01").balance == Decimal("500")
+        assert payment_service.get_account("DST-01").balance == Decimal("100")
+
 
 class TestPaymentAdversarial:
     """Adversarial verification suite for safety requirements."""

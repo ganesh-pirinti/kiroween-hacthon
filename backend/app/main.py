@@ -152,6 +152,67 @@ def list_runs_v1(
     return repository.list_verification_runs(requirement_id=requirement_id, limit=limit)
 
 
+@app.get("/api/v1/runs/{run_id}", response_model=VerificationRun, tags=["V1 Runs"])
+def get_run_v1(run_id: str) -> VerificationRun:
+    """Retrieve details and execution status of a specific verification run."""
+    run = repository.get_verification_run(run_id)
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Verification run '{run_id}' not found.",
+        )
+    return run
+
+
+@app.post("/api/v1/demonstrate/vulnerable-vs-corrected", tags=["V1 Demonstration"])
+def demonstrate_vulnerable_vs_corrected() -> Dict[str, Any]:
+    """Executes the ground-truth comparative demonstration for PAYMENT-004.
+    
+    1. Runs the adversarial test against the intentionally vulnerable test fixture:
+       - Captures real failure: 'DID NOT RAISE InsufficientFundsError'
+       - Maps exit code 1 to VIOLATION state
+       - Generates a CRITICAL finding with reproduction commands
+    2. Runs the adversarial test against the corrected implementation:
+       - Captures real pass: '1 passed'
+       - Maps exit code 0 to VERIFIED state
+    3. Preserves both runs and evidence records in SQLite.
+    """
+    # 1. Vulnerable run
+    vuln_target = "backend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service"
+    v_req, v_run, v_finding = evaluator.verify_requirement("PAYMENT-004", target_override=vuln_target)
+    v_evidence = repository.list_evidence_for_run(v_run.run_id)
+
+    # 2. Corrected run
+    corr_target = "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged"
+    c_req, c_run, c_finding = evaluator.verify_requirement("PAYMENT-004", target_override=corr_target)
+    c_evidence = repository.list_evidence_for_run(c_run.run_id)
+
+    return {
+        "requirement_id": "PAYMENT-004",
+        "scenario": {
+            "initial_sender_balance": 10000,
+            "attempted_transfer": 15000,
+            "expected_outcome": "Rejected with InsufficientFundsError; both balances unchanged",
+        },
+        "vulnerable_run": {
+            "run_id": v_run.run_id,
+            "exit_code": v_run.exit_code,
+            "status": v_req.status.value,
+            "concise_output": v_run.concise_output,
+            "finding": v_finding,
+            "evidence_id": v_evidence[0].evidence_id if v_evidence else None,
+        },
+        "corrected_run": {
+            "run_id": c_run.run_id,
+            "exit_code": c_run.exit_code,
+            "status": c_req.status.value,
+            "concise_output": c_run.concise_output,
+            "finding": c_finding,
+            "evidence_id": c_evidence[0].evidence_id if c_evidence else None,
+        },
+    }
+
+
 @app.get("/api/v1/evidence/{evidence_id}", response_model=Evidence, tags=["V1 Evidence"])
 def get_evidence_v1(evidence_id: str) -> Evidence:
     """Retrieve an immutable evidence artifact."""

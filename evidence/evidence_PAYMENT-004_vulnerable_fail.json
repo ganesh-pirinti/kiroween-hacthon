@@ -1,27 +1,25 @@
 {
-  "evidence_id": "ev-82c6796f4610",
+  "run_id": "run-20261113-1e0dd79f",
   "requirement_id": "PAYMENT-004",
-  "verdict": "FAIL",
-  "command": "C:\\Users\\Abhi\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m pytest backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged -v --tb=short -o cache_dir=.pytest_cache",
+  "verdict": "VIOLATION",
   "exit_code": 1,
-  "stdout": "============================= test session starts =============================\nplatform win32 -- Python 3.11.9, pytest-9.2.0, pluggy-1.7.0 -- C:\\Users\\Abhi\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\Users\\Abhi\\Desktop\\kiro hackthon\nconfigfile: pytest.ini\nplugins: anyio-4.15.1\ncollecting ... collected 1 item\n\nbackend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged FAILED [100%]\n\n================================== FAILURES ===================================\n_ TestPaymentAdversarial.test_overdraft_transfer_rejected_and_balances_unchanged _\nbackend\\tests\\test_payment.py:110: in test_overdraft_transfer_rejected_and_balances_unchanged\n    with pytest.raises(InsufficientFundsError, match=r\".*\"):\nE   Failed: DID NOT RAISE InsufficientFundsError\n=========================== short test summary info ===========================\nFAILED backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged - Failed: DID NOT RAISE InsufficientFundsError\n============================== 1 failed in 0.35s ==============================\n",
-  "stderr": "",
-  "duration_ms": 2429.45,
-  "timestamp_utc": "2026-11-13T19:18:34.666420+00:00",
-  "test_results": [
-    {
-      "test_name": "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged",
-      "status": "failed",
-      "duration_seconds": 0.0,
-      "message": null
-    }
-  ],
-  "code_fingerprint": "43eb477074ab49d3cf3f40e3f374e2abe31facb64daf628614dca83ada599f37",
-  "test_fingerprint": "aa66d2ecc020acd67156721db79bde5ead1568381c66de4865c0ae0d0426bf73",
-  "evidence_hash": "3a1a895191f2118836e9f96b2bebbc895bb3dec0ff41e70367a6f75b02289bd2",
-  "metadata": {
-    "python_version": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
-    "platform": "win32",
-    "run_phase": "vulnerable_baseline_demonstration"
-  }
+  "command": "C:\\Users\\Abhi\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m pytest backend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service -v --tb=short -o cache_dir=.pytest_cache",
+  "start_time": "2026-11-13T19:42:37.070872+00:00",
+  "end_time": "2026-11-13T19:42:39.363905+00:00",
+  "concise_output": "E   Failed: DID NOT RAISE InsufficientFundsError | FAILED backend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service - Failed: DID NOT RAISE InsufficientFundsError",
+  "finding": {
+    "finding_id": "fnd-cb8e4b79",
+    "requirement_id": "PAYMENT-004",
+    "severity": "CRITICAL",
+    "explanation": "Specification Violation on PAYMENT-004: Expected InsufficientFundsError was not raised. Overdraft protection failed to abort transaction.",
+    "reproduction_instructions": "C:\\Users\\Abhi\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m pytest backend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service -v --tb=short -o cache_dir=.pytest_cache",
+    "linked_evidence_ids": [
+      "ev-a5d4cb6e80"
+    ],
+    "created_at": "2026-11-13T19:42:39.363905+00:00"
+  },
+  "code_fingerprint": "a1bfe7884b6318d3a67c2d11beaa70583fe60bc70ddfbb31a946a137d325fa2f",
+  "test_fingerprint": "c6eb17c92e996d0bb395d59fa6be64728466ddaf675e63366de911da601ffc2b",
+  "sha256": "27a8db9d4b875caf0788cdff84cafe55078e40b53dcb48c74656e412ac3c28a7",
+  "raw_stdout": "============================= test session starts =============================\nplatform win32 -- Python 3.11.9, pytest-9.2.0, pluggy-1.7.0 -- C:\\Users\\Abhi\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\Users\\Abhi\\Desktop\\kiro hackthon\nconfigfile: pytest.ini\nplugins: anyio-4.15.1\ncollecting ... collected 1 item\n\nbackend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service FAILED [100%]\n\n================================== FAILURES ===================================\n______________ test_adversarial_overdraft_on_vulnerable_service _______________\nbackend\\tests\\test_adversarial_vulnerable.py:35: in test_adversarial_overdraft_on_vulnerable_service\n    with pytest.raises(InsufficientFundsError, match=r\".*\"):\nE   Failed: DID NOT RAISE InsufficientFundsError\n=========================== short test summary info ===========================\nFAILED backend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service - Failed: DID NOT RAISE InsufficientFundsError\n============================== 1 failed in 0.33s ==============================\n"
 }

@@ -1,9 +1,10 @@
-"""Tests for Ghost Protocol Foundation: Storage, Evaluator, and Invariants."""
+"""Tests for Ghost Protocol Foundation: Storage, Evaluator, Security, and Invariants."""
 
 from pathlib import Path
 import pytest
 
 from backend.app.engine.evaluator import VerificationEvaluator
+from backend.app.engine.runner import SubprocessRunner, MAX_OUTPUT_BYTES
 from backend.app.models.requirement import Requirement
 from backend.app.models.status import ExecutionStatus, FindingSeverity, VerificationStatus
 from backend.app.storage.database import Database
@@ -81,3 +82,36 @@ class TestEvaluatorExecution:
         assert finding is None
         # Must never be marked verified without evidence
         assert req.status != VerificationStatus.VERIFIED
+
+    def test_evaluator_vulnerable_target_creates_violation_finding(self, temp_repo: StorageRepository) -> None:
+        """Evaluating the vulnerable target must produce VIOLATION and an actionable Finding."""
+        temp_repo.sync_catalog(Path("requirements/catalog.json"))
+        evaluator = VerificationEvaluator(temp_repo)
+
+        vuln_target = "backend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service"
+        req, run, finding = evaluator.verify_requirement("PAYMENT-004", target_override=vuln_target)
+
+        assert req.status == VerificationStatus.VIOLATION
+        assert run.execution_status == ExecutionStatus.FAILED
+        assert run.exit_code == 1
+        assert finding is not None
+        assert finding.severity == FindingSeverity.CRITICAL
+        assert "InsufficientFundsError" in finding.explanation
+        assert "pytest" in finding.reproduction_instructions
+        assert len(run.finding_ids) == 1
+
+
+class TestSecurityBoundaries:
+    """Tests for sandbox security, path traversal, and output ceiling."""
+
+    def test_path_traversal_detection(self) -> None:
+        runner = SubprocessRunner(Path.cwd())
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            runner.execute_target("../../windows/system32/cmd.exe")
+
+    def test_output_limiting(self) -> None:
+        runner = SubprocessRunner(Path.cwd())
+        huge_text = "A" * (MAX_OUTPUT_BYTES + 5000)
+        limited = runner._limit_output(huge_text)
+        assert "TRUNCATED: Output exceeded" in limited
+        assert len(limited) < len(huge_text)

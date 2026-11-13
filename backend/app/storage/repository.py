@@ -100,9 +100,10 @@ class StorageRepository:
                 """
                 INSERT OR REPLACE INTO verification_runs (
                     run_id, requirement_id, timestamp, command, execution_status,
-                    exit_code, duration_ms, summary, code_fingerprint,
+                    exit_code, duration_ms, start_time, end_time, test_names,
+                    concise_output, finding_ids, summary, code_fingerprint,
                     test_fingerprint, environment_info
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run.run_id,
@@ -112,6 +113,11 @@ class StorageRepository:
                     run.execution_status.value,
                     run.exit_code,
                     run.duration_ms,
+                    run.start_time,
+                    run.end_time,
+                    json.dumps(run.test_names),
+                    run.concise_output,
+                    json.dumps(run.finding_ids),
                     run.summary.model_dump_json(),
                     run.code_fingerprint,
                     run.test_fingerprint,
@@ -281,6 +287,8 @@ class StorageRepository:
         )
 
     def _row_to_verification_run(self, row: sqlite3.Row) -> VerificationRun:
+        test_names = json.loads(row["test_names"]) if row["test_names"] else []
+        finding_ids = json.loads(row["finding_ids"]) if row["finding_ids"] else []
         return VerificationRun(
             run_id=row["run_id"],
             requirement_id=row["requirement_id"],
@@ -289,6 +297,11 @@ class StorageRepository:
             execution_status=ExecutionStatus(row["execution_status"]),
             exit_code=row["exit_code"],
             duration_ms=row["duration_ms"],
+            start_time=row["start_time"] if "start_time" in row.keys() and row["start_time"] else row["timestamp"],
+            end_time=row["end_time"] if "end_time" in row.keys() and row["end_time"] else row["timestamp"],
+            test_names=test_names,
+            concise_output=row["concise_output"] if "concise_output" in row.keys() and row["concise_output"] else "",
+            finding_ids=finding_ids,
             summary=RunSummary.model_validate_json(row["summary"]),
             code_fingerprint=row["code_fingerprint"],
             test_fingerprint=row["test_fingerprint"],

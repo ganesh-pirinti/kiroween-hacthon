@@ -1,260 +1,139 @@
-"""Ghost Protocol — Bug & Fix Demonstration Script.
+"""Ghost Protocol — Ground-Truth Verification Demonstration Script.
 
-Automates the complete verification lifecycle required by Milestone 1:
-1. Deploys the deliberately vulnerable PaymentService implementation.
-2. Executes the adversarial test (transferring ₹15,000 from ₹10,000 balance).
-3. Captures the real failing test output and links it to requirement PAYMENT-004.
-4. Deploys the corrected, secure PaymentService implementation.
-5. Re-executes the adversarial test and the entire test suite.
-6. Captures passing test outputs, hashes, and preserves both evidence records in `evidence/`.
+Automates the complete verification lifecycle required for PAYMENT-004:
+1. Runs adversarial test against the intentionally vulnerable test fixture (VulnerablePaymentService).
+   - Real exit code: 1
+   - Evaluated status: VIOLATION
+   - Real failure output: "Failed: DID NOT RAISE InsufficientFundsError"
+   - Generates actionable CRITICAL Finding with reproduction instructions
+2. Runs adversarial test against the corrected production implementation (PaymentService).
+   - Real exit code: 0
+   - Evaluated status: VERIFIED
+   - Real passing output: "1 passed"
+   - Confirms zero balance mutation and InsufficientFundsError
+3. Preserves both runs and cryptographic evidence records in `evidence/`.
 """
 
+import json
 import sys
 from pathlib import Path
 
-# Add project root to path
+# Add project root to sys.path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-from backend.app.verifier import Verifier
-from backend.app.evidence import EvidenceStore
+from backend.app.engine.evaluator import VerificationEvaluator
+from backend.app.storage.database import Database
+from backend.app.storage.repository import StorageRepository
 
-PAYMENT_FILE = ROOT_DIR / "backend" / "app" / "payment.py"
 EVIDENCE_DIR = ROOT_DIR / "evidence"
-
-VULNERABLE_CODE = '''"""Ghost Protocol Payment Implementation (VULNERABLE BASELINE)."""
-from __future__ import annotations
-import uuid
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from decimal import Decimal
-from typing import Dict, Union
-
-class PaymentError(Exception): pass
-class AccountNotFoundError(PaymentError): pass
-class InvalidAmountError(PaymentError): pass
-class InsufficientFundsError(PaymentError): pass
-class SelfTransferError(PaymentError): pass
-
-@dataclass
-class Account:
-    account_id: str
-    owner_name: str
-    balance: Decimal
-    def __post_init__(self) -> None:
-        if not isinstance(self.balance, Decimal):
-            self.balance = Decimal(str(self.balance))
-
-@dataclass
-class TransferResult:
-    transfer_id: str
-    sender_id: str
-    recipient_id: str
-    amount: Decimal
-    sender_balance_after: Decimal
-    recipient_balance_after: Decimal
-    timestamp: str
-    status: str
-
-class PaymentService:
-    def __init__(self) -> None:
-        self.accounts: Dict[str, Account] = {}
-
-    def create_account(self, account_id: str, owner_name: str, initial_balance: Union[Decimal, int, float, str]) -> Account:
-        balance_dec = Decimal(str(initial_balance))
-        if balance_dec < Decimal("0"):
-            raise InvalidAmountError("Initial balance cannot be negative")
-        account = Account(account_id=account_id, owner_name=owner_name, balance=balance_dec)
-        self.accounts[account_id] = account
-        return account
-
-    def get_account(self, account_id: str) -> Account:
-        if account_id not in self.accounts:
-            raise AccountNotFoundError(f"Account {account_id} not found")
-        return self.accounts[account_id]
-
-    def transfer(self, sender_id: str, recipient_id: str, amount: Union[Decimal, int, float, str]) -> TransferResult:
-        amt = Decimal(str(amount))
-        if amt <= Decimal("0"):
-            raise InvalidAmountError("Transfer amount must be strictly positive")
-        if sender_id == recipient_id:
-            raise SelfTransferError("Cannot transfer funds to the same account")
-
-        sender = self.get_account(sender_id)
-        recipient = self.get_account(recipient_id)
-
-        # BUG: Missing balance check (PAYMENT-004 violation)
-        # Deducts without checking if sender.balance >= amt
-        sender.balance -= amt
-        recipient.balance += amt
-
-        return TransferResult(
-            transfer_id=str(uuid.uuid4()),
-            sender_id=sender_id,
-            recipient_id=recipient_id,
-            amount=amt,
-            sender_balance_after=sender.balance,
-            recipient_balance_after=recipient.balance,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            status="SUCCESS",
-        )
-'''
-
-CORRECTED_CODE = '''"""Ghost Protocol Payment Implementation (CORRECTED & VERIFIED)."""
-from __future__ import annotations
-import uuid
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from decimal import Decimal
-from typing import Dict, Union
-
-class PaymentError(Exception): pass
-class AccountNotFoundError(PaymentError): pass
-class InvalidAmountError(PaymentError): pass
-class InsufficientFundsError(PaymentError): pass
-class SelfTransferError(PaymentError): pass
-
-@dataclass
-class Account:
-    account_id: str
-    owner_name: str
-    balance: Decimal
-    def __post_init__(self) -> None:
-        if not isinstance(self.balance, Decimal):
-            self.balance = Decimal(str(self.balance))
-
-@dataclass
-class TransferResult:
-    transfer_id: str
-    sender_id: str
-    recipient_id: str
-    amount: Decimal
-    sender_balance_after: Decimal
-    recipient_balance_after: Decimal
-    timestamp: str
-    status: str
-
-class PaymentService:
-    def __init__(self) -> None:
-        self.accounts: Dict[str, Account] = {}
-
-    def create_account(self, account_id: str, owner_name: str, initial_balance: Union[Decimal, int, float, str]) -> Account:
-        balance_dec = Decimal(str(initial_balance))
-        if balance_dec < Decimal("0"):
-            raise InvalidAmountError("Initial balance cannot be negative")
-        account = Account(account_id=account_id, owner_name=owner_name, balance=balance_dec)
-        self.accounts[account_id] = account
-        return account
-
-    def get_account(self, account_id: str) -> Account:
-        if account_id not in self.accounts:
-            raise AccountNotFoundError(f"Account {account_id} not found")
-        return self.accounts[account_id]
-
-    def transfer(self, sender_id: str, recipient_id: str, amount: Union[Decimal, int, float, str]) -> TransferResult:
-        amt = Decimal(str(amount))
-        if amt <= Decimal("0"):
-            raise InvalidAmountError("Transfer amount must be strictly positive")
-        if sender_id == recipient_id:
-            raise SelfTransferError("Cannot transfer funds to the same account")
-
-        sender = self.get_account(sender_id)
-        recipient = self.get_account(recipient_id)
-
-        # Enforce PAYMENT-004: reject overdrafts and preserve balances
-        if sender.balance < amt:
-            raise InsufficientFundsError(
-                f"Insufficient funds: account '{sender_id}' balance {sender.balance} < requested {amt}"
-            )
-
-        # Atomic mutation
-        sender.balance -= amt
-        recipient.balance += amt
-
-        return TransferResult(
-            transfer_id=str(uuid.uuid4()),
-            sender_id=sender_id,
-            recipient_id=recipient_id,
-            amount=amt,
-            sender_balance_after=sender.balance,
-            recipient_balance_after=recipient.balance,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            status="SUCCESS",
-        )
-'''
 
 
 def run_demonstration() -> None:
-    print("=" * 70)
-    print("GHOST PROTOCOL: MILESTONE 1 EVIDENCE ENGINE DEMONSTRATION")
-    print("Target Requirement: PAYMENT-004 (Overdraft Protection & Balance Preservation)")
-    print("=" * 70)
+    print("=" * 76)
+    print("  GHOST PROTOCOL — EXECUTABLE VERIFICATION DEMONSTRATION")
+    print("  Target Requirement: PAYMENT-004 (Overdraft Protection & Balance Preservation)")
+    print("  \"AI says Done. We demand proof.\"")
+    print("=" * 76)
 
-    store = EvidenceStore(EVIDENCE_DIR / "evidence.db")
-    verifier = Verifier(evidence_store=store, base_dir=ROOT_DIR)
-
-    # -------------------------------------------------------------
-    # Step 1: Deploy Vulnerable Code & Verify
-    # -------------------------------------------------------------
-    print("\n[Step 1] Deploying DELIBERATELY VULNERABLE payment.py...")
-    PAYMENT_FILE.write_text(VULNERABLE_CODE, encoding="utf-8")
-
-    print("[Step 2] Executing adversarial test for PAYMENT-004...")
-    vuln_json = EVIDENCE_DIR / "evidence_PAYMENT-004_vulnerable_fail.json"
-    vuln_record = verifier.verify_requirement(
-        "PAYMENT-004",
-        export_json_path=vuln_json,
-        custom_metadata={"run_phase": "vulnerable_baseline_demonstration"},
-    )
-
-    print(f" -> Execution Exit Code: {vuln_record.exit_code}")
-    print(f" -> Recorded Verdict:    {vuln_record.verdict.value}")
-    print(f" -> Code Fingerprint:    {vuln_record.code_fingerprint[:16]}...")
-    print(f" -> Evidence Hash:       {vuln_record.evidence_hash[:16]}...")
-    print(f" -> Evidence Saved:      {vuln_json.name}")
+    db = Database(EVIDENCE_DIR / "evidence.db")
+    repo = StorageRepository(db)
+    catalog_path = ROOT_DIR / "requirements" / "catalog.json"
+    repo.sync_catalog(catalog_path)
+    evaluator = VerificationEvaluator(repo, project_root=ROOT_DIR)
 
     # -------------------------------------------------------------
-    # Step 2: Deploy Corrected Code & Verify
+    # Step 1: Run Adversarial Test on Vulnerable Fixture
     # -------------------------------------------------------------
-    print("\n[Step 3] Deploying CORRECTED & SECURE payment.py...")
-    PAYMENT_FILE.write_text(CORRECTED_CODE, encoding="utf-8")
+    print("\n[Phase 1] Executing Adversarial Test against Vulnerable Fixture...")
+    print("  Scenario: Sender initial ₹10,000, attempted transfer ₹15,000")
+    print("  Target:   backend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service")
 
-    print("[Step 4] Executing adversarial test for PAYMENT-004 on corrected code...")
-    pass_json = EVIDENCE_DIR / "evidence_PAYMENT-004_corrected_pass.json"
-    pass_record = verifier.verify_requirement(
-        "PAYMENT-004",
-        export_json_path=pass_json,
-        custom_metadata={"run_phase": "corrected_implementation_verification"},
-    )
+    vuln_target = "backend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service"
+    v_req, v_run, v_finding = evaluator.verify_requirement("PAYMENT-004", target_override=vuln_target)
+    v_evidence = repo.list_evidence_for_run(v_run.run_id)
 
-    print(f" -> Execution Exit Code: {pass_record.exit_code}")
-    print(f" -> Recorded Verdict:    {pass_record.verdict.value}")
-    print(f" -> Code Fingerprint:    {pass_record.code_fingerprint[:16]}...")
-    print(f" -> Evidence Hash:       {pass_record.evidence_hash[:16]}...")
-    print(f" -> Evidence Saved:      {pass_json.name}")
+    print(f"  -> Execution Exit Code:   {v_run.exit_code}")
+    print(f"  -> Verification Status:   {v_req.status.value}")
+    print(f"  -> Concise Output:        {v_run.concise_output}")
+    print(f"  -> Code Fingerprint:      {v_run.code_fingerprint[:16]}...")
+    if v_finding:
+        print(f"  -> Generated Finding ID:  {v_finding.finding_id} [{v_finding.severity.value}]")
+        print(f"  -> Finding Explanation:   {v_finding.explanation}")
+        print(f"  -> Repro Command:         {v_finding.reproduction_instructions}")
+
+    if v_evidence:
+        vuln_json = EVIDENCE_DIR / "evidence_PAYMENT-004_vulnerable_fail.json"
+        vuln_json.write_text(
+            json.dumps({
+                "run_id": v_run.run_id,
+                "requirement_id": "PAYMENT-004",
+                "verdict": v_req.status.value,
+                "exit_code": v_run.exit_code,
+                "command": v_run.command,
+                "start_time": v_run.start_time,
+                "end_time": v_run.end_time,
+                "concise_output": v_run.concise_output,
+                "finding": v_finding.model_dump() if v_finding else None,
+                "code_fingerprint": v_run.code_fingerprint,
+                "test_fingerprint": v_run.test_fingerprint,
+                "sha256": v_evidence[0].integrity_metadata.sha256,
+                "raw_stdout": v_evidence[0].payload,
+            }, indent=2),
+            encoding="utf-8",
+        )
+        print(f"  -> Exported Evidence:     {vuln_json.name}")
 
     # -------------------------------------------------------------
-    # Step 3: Run Full Test Suite
+    # Step 2: Run Adversarial Test on Corrected Implementation
     # -------------------------------------------------------------
-    print("\n[Step 5] Running entire test suite against corrected code...")
-    suite_json = EVIDENCE_DIR / "evidence_full_test_suite_pass.json"
-    suite_record = verifier.run_entire_test_suite(export_json_path=suite_json)
-    print(f" -> Suite Exit Code:     {suite_record.exit_code}")
-    print(f" -> Suite Verdict:       {suite_record.verdict.value}")
+    print("\n[Phase 2] Executing Adversarial Test against Corrected Implementation...")
+    print("  Target:   backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged")
+
+    corr_target = "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged"
+    c_req, c_run, c_finding = evaluator.verify_requirement("PAYMENT-004", target_override=corr_target)
+    c_evidence = repo.list_evidence_for_run(c_run.run_id)
+
+    print(f"  -> Execution Exit Code:   {c_run.exit_code}")
+    print(f"  -> Verification Status:   {c_req.status.value}")
+    print(f"  -> Concise Output:        {c_run.concise_output}")
+    print(f"  -> Code Fingerprint:      {c_run.code_fingerprint[:16]}...")
+    print(f"  -> Findings Generated:    {0 if c_finding is None else 1}")
+
+    if c_evidence:
+        corr_json = EVIDENCE_DIR / "evidence_PAYMENT-004_corrected_pass.json"
+        corr_json.write_text(
+            json.dumps({
+                "run_id": c_run.run_id,
+                "requirement_id": "PAYMENT-004",
+                "verdict": c_req.status.value,
+                "exit_code": c_run.exit_code,
+                "command": c_run.command,
+                "start_time": c_run.start_time,
+                "end_time": c_run.end_time,
+                "concise_output": c_run.concise_output,
+                "finding": None,
+                "code_fingerprint": c_run.code_fingerprint,
+                "test_fingerprint": c_run.test_fingerprint,
+                "sha256": c_evidence[0].integrity_metadata.sha256,
+                "raw_stdout": c_evidence[0].payload,
+            }, indent=2),
+            encoding="utf-8",
+        )
+        print(f"  -> Exported Evidence:     {corr_json.name}")
 
     # -------------------------------------------------------------
-    # Summary Scorecard
+    # Scorecard
     # -------------------------------------------------------------
-    print("\n" + "=" * 70)
-    print("VERIFICATION EVIDENCE SCORECARD")
-    print("=" * 70)
-    print(f"{'Phase':<25} | {'Requirement':<12} | {'Exit':<5} | {'Verdict':<8} | {'Evidence File'}")
-    print("-" * 70)
-    print(f"{'Vulnerable Baseline':<25} | {'PAYMENT-004':<12} | {vuln_record.exit_code:<5} | {vuln_record.verdict.value:<8} | {vuln_json.name}")
-    print(f"{'Corrected Implementation':<25} | {'PAYMENT-004':<12} | {pass_record.exit_code:<5} | {pass_record.verdict.value:<8} | {pass_json.name}")
-    print(f"{'Full Test Suite':<25} | {'SUITE-ALL':<12} | {suite_record.exit_code:<5} | {suite_record.verdict.value:<8} | {suite_json.name}")
-    print("=" * 70)
-    print("\nDemonstration complete. Real evidence is preserved in evidence/ directory and SQLite DB.")
+    print("\n" + "=" * 76)
+    print("  VERIFICATION EVIDENCE SCORECARD")
+    print("=" * 76)
+    print(f"  {'Run Target':<28} | {'Exit':<5} | {'Status':<10} | {'Finding Generated'}")
+    print("  " + "-" * 72)
+    print(f"  {'Vulnerable Fixture':<28} | {v_run.exit_code:<5} | {v_req.status.value:<10} | {'YES [CRITICAL]' if v_finding else 'NO'}")
+    print(f"  {'Corrected Implementation':<28} | {c_run.exit_code:<5} | {c_req.status.value:<10} | {'NO' if c_finding is None else 'YES'}")
+    print("=" * 76)
+    print("\n  Demonstration complete. Real evidence is sealed in SQLite and evidence/ JSON files.")
 
 
 if __name__ == "__main__":
