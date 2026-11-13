@@ -1,0 +1,149 @@
+{
+  "benchmark_id": "bench-20261113-203747",
+  "timestamp": "2026-11-13T20:37:47.052256+00:00",
+  "execution_duration_ms": 1.58,
+  "environment": {
+    "python_version": "3.11.9",
+    "platform": "win32",
+    "os": "Windows-10-10.0.26100-SP0"
+  },
+  "baseline_metrics": {
+    "suite_name": "Baseline Suite (Ordinary Happy-Path Tests)",
+    "total_cases": 7,
+    "seeded_defects_tested": 6,
+    "clean_controls_tested": 1,
+    "true_positives": 0,
+    "false_negatives": 6,
+    "true_negatives": 1,
+    "false_positives": 0,
+    "defect_detection_rate": 0.0,
+    "false_negative_rate": 100.0,
+    "specificity": 100.0,
+    "accuracy": 14.3
+  },
+  "ghost_metrics": {
+    "suite_name": "Ghost Protocol Verification Suite (Adversarial & Invariants)",
+    "total_cases": 7,
+    "seeded_defects_tested": 6,
+    "clean_controls_tested": 1,
+    "true_positives": 6,
+    "false_negatives": 0,
+    "true_negatives": 1,
+    "false_positives": 0,
+    "defect_detection_rate": 100.0,
+    "false_negative_rate": 0.0,
+    "specificity": 100.0,
+    "accuracy": 100.0
+  },
+  "comparative_advantage": {
+    "defect_detection_delta_percentage_points": 100.0,
+    "false_negative_reduction_percentage_points": 100.0,
+    "clean_control_specificity_maintained": true,
+    "conclusion": "Ghost Protocol independently verified and detected 6/6 seeded defects (100.0% detection rate vs 0.0% for baseline happy-path tests) with 0 false alarms on the clean reference implementation."
+  },
+  "case_results": [
+    {
+      "defect_id": "DEFECT-01-OVERDRAFT",
+      "name": "Omission of Overdraft Check",
+      "target_requirement": "PAYMENT-004",
+      "is_defective": true,
+      "baseline_passed": true,
+      "baseline_detected_defect": false,
+      "baseline_classification": "FALSE_NEGATIVE",
+      "ghost_passed": false,
+      "ghost_detected_defect": true,
+      "ghost_classification": "TRUE_POSITIVE",
+      "ghost_findings_count": 1,
+      "summary": "Ghost: TRUE_POSITIVE (1 violations) | Baseline: FALSE_NEGATIVE (PASSED)"
+    },
+    {
+      "defect_id": "DEFECT-02-NON-ATOMIC",
+      "name": "Non-Atomic Failure / Balance Corruption",
+      "target_requirement": "PAYMENT-004",
+      "is_defective": true,
+      "baseline_passed": true,
+      "baseline_detected_defect": false,
+      "baseline_classification": "FALSE_NEGATIVE",
+      "ghost_passed": false,
+      "ghost_detected_defect": true,
+      "ghost_classification": "TRUE_POSITIVE",
+      "ghost_findings_count": 4,
+      "summary": "Ghost: TRUE_POSITIVE (4 violations) | Baseline: FALSE_NEGATIVE (PASSED)"
+    },
+    {
+      "defect_id": "DEFECT-03-NEGATIVE-AMOUNT",
+      "name": "Negative Amount Injection",
+      "target_requirement": "PAYMENT-002",
+      "is_defective": true,
+      "baseline_passed": true,
+      "baseline_detected_defect": false,
+      "baseline_classification": "FALSE_NEGATIVE",
+      "ghost_passed": false,
+      "ghost_detected_defect": true,
+      "ghost_classification": "TRUE_POSITIVE",
+      "ghost_findings_count": 2,
+      "summary": "Ghost: TRUE_POSITIVE (2 violations) | Baseline: FALSE_NEGATIVE (PASSED)"
+    },
+    {
+      "defect_id": "DEFECT-04-ZERO-AMOUNT",
+      "name": "Zero Amount Acceptance (Boundary)",
+      "target_requirement": "PAYMENT-002",
+      "is_defective": true,
+      "baseline_passed": true,
+      "baseline_detected_defect": false,
+      "baseline_classification": "FALSE_NEGATIVE",
+      "ghost_passed": false,
+      "ghost_detected_defect": true,
+      "ghost_classification": "TRUE_POSITIVE",
+      "ghost_findings_count": 1,
+      "summary": "Ghost: TRUE_POSITIVE (1 violations) | Baseline: FALSE_NEGATIVE (PASSED)"
+    },
+    {
+      "defect_id": "DEFECT-05-SELF-TRANSFER",
+      "name": "Loopback Self-Transfer Allowed",
+      "target_requirement": "PAYMENT-005",
+      "is_defective": true,
+      "baseline_passed": true,
+      "baseline_detected_defect": false,
+      "baseline_classification": "FALSE_NEGATIVE",
+      "ghost_passed": false,
+      "ghost_detected_defect": true,
+      "ghost_classification": "TRUE_POSITIVE",
+      "ghost_findings_count": 1,
+      "summary": "Ghost: TRUE_POSITIVE (1 violations) | Baseline: FALSE_NEGATIVE (PASSED)"
+    },
+    {
+      "defect_id": "DEFECT-06-CONSERVATION-LEAK",
+      "name": "Monetary Conservation Leak (Phantom Fee)",
+      "target_requirement": "PAYMENT-003",
+      "is_defective": true,
+      "baseline_passed": true,
+      "baseline_detected_defect": false,
+      "baseline_classification": "FALSE_NEGATIVE",
+      "ghost_passed": false,
+      "ghost_detected_defect": true,
+      "ghost_classification": "TRUE_POSITIVE",
+      "ghost_findings_count": 1,
+      "summary": "Ghost: TRUE_POSITIVE (1 violations) | Baseline: FALSE_NEGATIVE (PASSED)"
+    },
+    {
+      "defect_id": "CONTROL-00-CLEAN",
+      "name": "Golden Clean Service (Defect-Free)",
+      "target_requirement": "ALL",
+      "is_defective": false,
+      "baseline_passed": true,
+      "baseline_detected_defect": false,
+      "baseline_classification": "TRUE_NEGATIVE",
+      "ghost_passed": true,
+      "ghost_detected_defect": false,
+      "ghost_classification": "TRUE_NEGATIVE",
+      "ghost_findings_count": 0,
+      "summary": "Ghost: TRUE_NEGATIVE (0 violations) | Baseline: TRUE_NEGATIVE (PASSED)"
+    }
+  ],
+  "methodology": {
+    "isolation": "All defect fixtures are located in backend/benchmarks/fixtures/ isolated from production payment engine.",
+    "verification": "Outcomes are measured using programmatic test execution; zero simulation or fabricated statistics.",
+    "safety": "Subprocess and harness execution are memory and runtime bounded."
+  }
+}
