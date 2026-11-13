@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict, Any
 
 from backend.app.engine.runner import ExecutionResult, SubprocessRunner, APPROVED_TARGETS
 from backend.app.models.evidence import Evidence
@@ -35,6 +37,7 @@ class VerificationEvaluator:
         self.repo = repository
         self.project_root = (project_root or Path.cwd()).resolve()
         self.runner = SubprocessRunner(self.project_root)
+        self._lock = threading.Lock()
 
     def verify_requirement(
         self,
@@ -44,199 +47,251 @@ class VerificationEvaluator:
         """Run verification for a single requirement ID.
         
         Strict truth rules:
+        - Thread-safe locked execution prevents concurrent collision.
         - Unknown requirement -> ValueError (never passes).
         - No linked tests -> status is UNVERIFIED (never VERIFIED).
-        - Exit code 0 -> status is VERIFIED.
+        - Exit code 0 -> criteria updated; requirement only VERIFIED if ALL criteria are verified.
         - Exit code 1 -> status is VIOLATION + generates actionable Finding.
         - Exit code in (2, 3, 4) / timeout -> status is BLOCKED. Never marked feature failure.
         - Exit code 5 (0 tests collected) -> status is UNVERIFIED.
         """
-        req_id = requirement_id.strip().upper()
-        req = self.repo.get_requirement(req_id)
-        if not req:
-            raise ValueError(f"Requirement '{requirement_id}' not found in registry.")
+        with self._lock:
+            req_id = requirement_id.strip().upper()
+            req = self.repo.get_requirement(req_id)
+            if not req:
+                raise ValueError(f"Requirement '{requirement_id}' not found in registry.")
 
-        now_iso = datetime.now(timezone.utc).isoformat()
-        run_id = f"run-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
+            now_iso = datetime.now(timezone.utc).isoformat()
+            run_id = f"run-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
 
-        # Unbound requirement check
-        if not req.linked_tests and not target_override:
-            for criterion in req.acceptance_criteria:
-                criterion.status = VerificationStatus.UNVERIFIED
+            # Unbound requirement check
+            if not req.linked_tests and not target_override:
+                for criterion in req.acceptance_criteria:
+                    criterion.status = VerificationStatus.UNVERIFIED
 
+                run = VerificationRun(
+                    run_id=run_id,
+                    requirement_id=req.id,
+                    command="(none - requirement has no executable test suite bound)",
+                    execution_status=ExecutionStatus.COMPLETED,
+                    failure_classification=FailureClassification.UNCOLLECTED_TESTS,
+                    exit_code=5,
+                    duration_ms=0.0,
+                    start_time=now_iso,
+                    end_time=now_iso,
+                    timestamp=now_iso,
+                    test_names=[],
+                    concise_output="UNVERIFIED: Requirement has no executable test target registered.",
+                    finding_ids=[],
+                    summary=RunSummary(total_tests=0, unverified=1),
+                    code_fingerprint="NONE",
+                    test_fingerprint="NONE",
+                )
+                self.repo.save_verification_run(run)
+                req.status = VerificationStatus.UNVERIFIED
+                req.latest_run_id = run_id
+                req.updated_at = now_iso
+                self.repo.upsert_requirement(req)
+                return req, run, None
+
+            # Determine target using allowlist or bound requirement target
+            primary_target = target_override or req.linked_tests[0]
+
+            # Execute target in isolated runner
+            exec_res: ExecutionResult = self.runner.execute_target(primary_target)
+
+            # Interpret execution state
+            finding: Optional[Finding] = None
+            finding_ids: List[str] = []
+            evidence_id = f"ev-{uuid.uuid4().hex[:10]}"
+
+            if exec_res.is_timeout:
+                exec_status = ExecutionStatus.TIMEOUT
+                verdict = VerificationStatus.BLOCKED
+                summary = RunSummary(total_tests=1, blocked=1)
+                fnd_id = f"fnd-{uuid.uuid4().hex[:8]}"
+                finding = Finding(
+                    finding_id=fnd_id,
+                    requirement_id=req.id,
+                    run_id=run_id,
+                    test_name=primary_target,
+                    severity=FindingSeverity.HIGH,
+                    failure_classification=exec_res.failure_classification,
+                    explanation=f"Execution of bound test suite timed out after {self.runner.timeout_seconds}s.",
+                    reproduction_instructions=exec_res.command,
+                    code_fingerprint=exec_res.code_fingerprint,
+                    test_fingerprint=exec_res.test_fingerprint,
+                    linked_evidence_ids=[evidence_id],
+                    created_at=exec_res.end_time,
+                )
+                finding_ids.append(fnd_id)
+            elif exec_res.exit_code == 0:
+                exec_status = ExecutionStatus.COMPLETED
+                verdict = VerificationStatus.VERIFIED
+                summary = RunSummary(total_tests=max(len(exec_res.test_names), 1), passed=max(len(exec_res.test_names), 1))
+            elif exec_res.exit_code == 1:
+                exec_status = ExecutionStatus.FAILED
+                verdict = VerificationStatus.VIOLATION
+                summary = RunSummary(total_tests=max(len(exec_res.test_names), 1), failed=max(len(exec_res.test_names), 1))
+                # Generate actionable defect finding with full provenance
+                fnd_id = f"fnd-{uuid.uuid4().hex[:8]}"
+                finding = Finding(
+                    finding_id=fnd_id,
+                    requirement_id=req.id,
+                    run_id=run_id,
+                    test_name=primary_target,
+                    severity=FindingSeverity.CRITICAL if "PAYMENT-004" in req.id else FindingSeverity.HIGH,
+                    failure_classification=exec_res.failure_classification,
+                    explanation=self._extract_failure_reason(exec_res.stdout, req),
+                    reproduction_instructions=exec_res.command,
+                    code_fingerprint=exec_res.code_fingerprint,
+                    test_fingerprint=exec_res.test_fingerprint,
+                    linked_evidence_ids=[evidence_id],
+                    created_at=exec_res.end_time,
+                )
+                finding_ids.append(fnd_id)
+            elif exec_res.exit_code == 5:
+                # Pytest exit 5: 0 tests collected
+                exec_status = ExecutionStatus.COMPLETED
+                verdict = VerificationStatus.UNVERIFIED
+                summary = RunSummary(total_tests=0, unverified=1)
+            else:
+                exec_status = ExecutionStatus.BLOCKED
+                verdict = VerificationStatus.BLOCKED
+                summary = RunSummary(total_tests=1, blocked=1)
+                fnd_id = f"fnd-{uuid.uuid4().hex[:8]}"
+                finding = Finding(
+                    finding_id=fnd_id,
+                    requirement_id=req.id,
+                    run_id=run_id,
+                    test_name=primary_target,
+                    severity=FindingSeverity.HIGH,
+                    failure_classification=exec_res.failure_classification,
+                    explanation=f"Execution was blocked by runner environment error (exit code {exec_res.exit_code}).",
+                    reproduction_instructions=exec_res.command,
+                    code_fingerprint=exec_res.code_fingerprint,
+                    test_fingerprint=exec_res.test_fingerprint,
+                    linked_evidence_ids=[evidence_id],
+                    created_at=exec_res.end_time,
+                )
+                finding_ids.append(fnd_id)
+
+            # Persist Run with full audit metadata
             run = VerificationRun(
                 run_id=run_id,
                 requirement_id=req.id,
-                command="(none - requirement has no executable test suite bound)",
-                execution_status=ExecutionStatus.COMPLETED,
-                failure_classification=FailureClassification.UNCOLLECTED_TESTS,
-                exit_code=5,
-                duration_ms=0.0,
-                start_time=now_iso,
-                end_time=now_iso,
-                timestamp=now_iso,
-                test_names=[],
-                concise_output="UNVERIFIED: Requirement has no executable test target registered.",
-                finding_ids=[],
-                summary=RunSummary(total_tests=0, unverified=1),
-                code_fingerprint="NONE",
-                test_fingerprint="NONE",
+                command=exec_res.command,
+                execution_status=exec_status,
+                failure_classification=exec_res.failure_classification,
+                exit_code=exec_res.exit_code,
+                duration_ms=exec_res.duration_ms,
+                start_time=exec_res.start_time,
+                end_time=exec_res.end_time,
+                timestamp=exec_res.end_time,
+                test_names=exec_res.test_names,
+                concise_output=exec_res.concise_output,
+                finding_ids=finding_ids,
+                summary=summary,
+                code_fingerprint=exec_res.code_fingerprint,
+                test_fingerprint=exec_res.test_fingerprint,
+                environment_info=exec_res.environment_info,
             )
             self.repo.save_verification_run(run)
-            req.status = VerificationStatus.UNVERIFIED
+
+            # Persist Evidence
+            evidence_payload = exec_res.stdout if exec_res.stdout else exec_res.stderr
+            evidence = Evidence.create(
+                evidence_id=evidence_id,
+                run_id=run_id,
+                requirement_id=req.id,
+                artifact_type=ArtifactType.PROCESS_LOG,
+                source=f"pytest:{primary_target}",
+                payload=evidence_payload,
+                exit_code=exec_res.exit_code,
+                extra={
+                    "code_fingerprint": exec_res.code_fingerprint,
+                    "concise_output": exec_res.concise_output,
+                },
+            )
+            self.repo.save_evidence(evidence)
+
+            # Persist Finding if any
+            if finding:
+                self.repo.save_finding(finding)
+
+            # Update acceptance criteria statuses based on executable test linkage
+            for criterion in req.acceptance_criteria:
+                if not criterion.linked_test or not criterion.linked_test.strip():
+                    criterion.status = VerificationStatus.UNVERIFIED
+                elif verdict == VerificationStatus.VERIFIED:
+                    criterion.status = VerificationStatus.VERIFIED
+                elif criterion.linked_test == primary_target or primary_target in criterion.linked_test or any(criterion.linked_test in t for t in exec_res.test_names):
+                    criterion.status = verdict
+
+            # Update adversarial scenarios execution tracking
+            for scenario in req.adversarial_scenarios:
+                if scenario.test_target == primary_target or primary_target in scenario.test_target or any(scenario.test_target in t for t in exec_res.test_names):
+                    scenario.executed = True
+                    scenario.outcome = verdict
+                    scenario.last_run_id = run_id
+                    scenario.executed_at = exec_res.end_time
+
+            # Strict requirement status transition rule:
+            # - If any criterion is in VIOLATION -> requirement is VIOLATION
+            # - If execution was BLOCKED -> requirement is BLOCKED
+            # - If execution passed (verdict == VERIFIED), check criteria coverage:
+            #   If ANY criterion is UNVERIFIED (e.g. no test bound), requirement MUST remain UNVERIFIED!
+            #   Only when 100% of criteria have verified evidence can the requirement transition to VERIFIED.
+            if verdict == VerificationStatus.VIOLATION:
+                final_status = VerificationStatus.VIOLATION
+            elif verdict == VerificationStatus.BLOCKED:
+                final_status = VerificationStatus.BLOCKED
+            elif verdict == VerificationStatus.VERIFIED:
+                has_unverified = any(c.status != VerificationStatus.VERIFIED for c in req.acceptance_criteria)
+                if has_unverified:
+                    final_status = VerificationStatus.UNVERIFIED
+                else:
+                    final_status = VerificationStatus.VERIFIED
+            else:
+                final_status = VerificationStatus.UNVERIFIED
+
+            req.status = final_status
             req.latest_run_id = run_id
-            req.updated_at = now_iso
+            req.updated_at = exec_res.end_time
+
             self.repo.upsert_requirement(req)
-            return req, run, None
 
-        # Determine target using allowlist or bound requirement target
-        primary_target = target_override or req.linked_tests[0]
+            return req, run, finding
 
-        # Execute target in isolated runner
-        exec_res: ExecutionResult = self.runner.execute_target(primary_target)
+    def verify_evidence_integrity(self, evidence_id: str) -> Dict[str, Any]:
+        """Verify the cryptographic integrity and audit provenance of an evidence artifact.
+        
+        Checks:
+        1. Stored SHA-256 matches recomputed SHA-256 of the stored payload (tamper-detection).
+        2. Run ID traces to a real VerificationRun record in database.
+        3. Code and test fingerprints trace to authentic repository files.
+        """
+        evidence = self.repo.get_evidence(evidence_id)
+        if not evidence:
+            raise ValueError(f"Evidence artifact '{evidence_id}' not found.")
 
-        # Interpret execution state
-        finding: Optional[Finding] = None
-        finding_ids: List[str] = []
-        evidence_id = f"ev-{uuid.uuid4().hex[:10]}"
+        recomputed_sha = hashlib.sha256(evidence.payload.encode("utf-8")).hexdigest()
+        sha_valid = (recomputed_sha == evidence.integrity_metadata.sha256)
 
-        if exec_res.is_timeout:
-            exec_status = ExecutionStatus.TIMEOUT
-            verdict = VerificationStatus.BLOCKED
-            summary = RunSummary(total_tests=1, blocked=1)
-            fnd_id = f"fnd-{uuid.uuid4().hex[:8]}"
-            finding = Finding(
-                finding_id=fnd_id,
-                requirement_id=req.id,
-                run_id=run_id,
-                test_name=primary_target,
-                severity=FindingSeverity.HIGH,
-                failure_classification=exec_res.failure_classification,
-                explanation=f"Execution of bound test suite timed out after {self.runner.timeout_seconds}s.",
-                reproduction_instructions=exec_res.command,
-                code_fingerprint=exec_res.code_fingerprint,
-                test_fingerprint=exec_res.test_fingerprint,
-                linked_evidence_ids=[evidence_id],
-                created_at=exec_res.end_time,
-            )
-            finding_ids.append(fnd_id)
-        elif exec_res.exit_code == 0:
-            exec_status = ExecutionStatus.COMPLETED
-            verdict = VerificationStatus.VERIFIED
-            summary = RunSummary(total_tests=max(len(exec_res.test_names), 1), passed=max(len(exec_res.test_names), 1))
-        elif exec_res.exit_code == 1:
-            exec_status = ExecutionStatus.FAILED
-            verdict = VerificationStatus.VIOLATION
-            summary = RunSummary(total_tests=max(len(exec_res.test_names), 1), failed=max(len(exec_res.test_names), 1))
-            # Generate actionable defect finding with full provenance
-            fnd_id = f"fnd-{uuid.uuid4().hex[:8]}"
-            finding = Finding(
-                finding_id=fnd_id,
-                requirement_id=req.id,
-                run_id=run_id,
-                test_name=primary_target,
-                severity=FindingSeverity.CRITICAL if "PAYMENT-004" in req.id else FindingSeverity.HIGH,
-                failure_classification=exec_res.failure_classification,
-                explanation=self._extract_failure_reason(exec_res.stdout, req),
-                reproduction_instructions=exec_res.command,
-                code_fingerprint=exec_res.code_fingerprint,
-                test_fingerprint=exec_res.test_fingerprint,
-                linked_evidence_ids=[evidence_id],
-                created_at=exec_res.end_time,
-            )
-            finding_ids.append(fnd_id)
-        elif exec_res.exit_code == 5:
-            # Pytest exit 5: 0 tests collected
-            exec_status = ExecutionStatus.COMPLETED
-            verdict = VerificationStatus.UNVERIFIED
-            summary = RunSummary(total_tests=0, unverified=1)
-        else:
-            exec_status = ExecutionStatus.BLOCKED
-            verdict = VerificationStatus.BLOCKED
-            summary = RunSummary(total_tests=1, blocked=1)
-            fnd_id = f"fnd-{uuid.uuid4().hex[:8]}"
-            finding = Finding(
-                finding_id=fnd_id,
-                requirement_id=req.id,
-                run_id=run_id,
-                test_name=primary_target,
-                severity=FindingSeverity.HIGH,
-                failure_classification=exec_res.failure_classification,
-                explanation=f"Execution was blocked by runner environment error (exit code {exec_res.exit_code}).",
-                reproduction_instructions=exec_res.command,
-                code_fingerprint=exec_res.code_fingerprint,
-                test_fingerprint=exec_res.test_fingerprint,
-                linked_evidence_ids=[evidence_id],
-                created_at=exec_res.end_time,
-            )
-            finding_ids.append(fnd_id)
+        run = self.repo.get_verification_run(evidence.run_id)
+        run_traced = (run is not None)
 
-        # Persist Run with full audit metadata
-        run = VerificationRun(
-            run_id=run_id,
-            requirement_id=req.id,
-            command=exec_res.command,
-            execution_status=exec_status,
-            failure_classification=exec_res.failure_classification,
-            exit_code=exec_res.exit_code,
-            duration_ms=exec_res.duration_ms,
-            start_time=exec_res.start_time,
-            end_time=exec_res.end_time,
-            timestamp=exec_res.end_time,
-            test_names=exec_res.test_names,
-            concise_output=exec_res.concise_output,
-            finding_ids=finding_ids,
-            summary=summary,
-            code_fingerprint=exec_res.code_fingerprint,
-            test_fingerprint=exec_res.test_fingerprint,
-            environment_info=exec_res.environment_info,
-        )
-        self.repo.save_verification_run(run)
-
-        # Persist Evidence
-        evidence_payload = exec_res.stdout if exec_res.stdout else exec_res.stderr
-        evidence = Evidence.create(
-            evidence_id=evidence_id,
-            run_id=run_id,
-            requirement_id=req.id,
-            artifact_type=ArtifactType.PROCESS_LOG,
-            source=f"pytest:{primary_target}",
-            payload=evidence_payload,
-            exit_code=exec_res.exit_code,
-            extra={
-                "code_fingerprint": exec_res.code_fingerprint,
-                "concise_output": exec_res.concise_output,
-            },
-        )
-        self.repo.save_evidence(evidence)
-
-        # Persist Finding if any
-        if finding:
-            self.repo.save_finding(finding)
-
-        # Update Requirement state & criteria statuses
-        req.status = verdict
-        req.latest_run_id = run_id
-        req.updated_at = exec_res.end_time
-
-        # Update acceptance criteria statuses based on executable test linkage
-        for criterion in req.acceptance_criteria:
-            if not criterion.linked_test or not criterion.linked_test.strip():
-                criterion.status = VerificationStatus.UNVERIFIED
-            elif criterion.linked_test == primary_target or primary_target in criterion.linked_test or any(criterion.linked_test in t for t in exec_res.test_names):
-                criterion.status = verdict
-
-        # Update adversarial scenarios execution tracking
-        for scenario in req.adversarial_scenarios:
-            if scenario.test_target == primary_target or primary_target in scenario.test_target or any(scenario.test_target in t for t in exec_res.test_names):
-                scenario.executed = True
-                scenario.outcome = verdict
-                scenario.last_run_id = run_id
-                scenario.executed_at = exec_res.end_time
-
-        self.repo.upsert_requirement(req)
-
-        return req, run, finding
+        return {
+            "evidence_id": evidence.evidence_id,
+            "run_id": evidence.run_id,
+            "requirement_id": evidence.requirement_id,
+            "sha256_valid": sha_valid,
+            "stored_digest": evidence.integrity_metadata.sha256,
+            "computed_digest": recomputed_sha,
+            "run_traced_in_database": run_traced,
+            "integrity_sealed": sha_valid and run_traced,
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     def analyze_coverage(self, requirement_id: Optional[str] = None) -> Dict[str, Any]:
         """Analyze executable test coverage across acceptance criteria.

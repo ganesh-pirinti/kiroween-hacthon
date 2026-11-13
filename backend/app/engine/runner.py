@@ -23,8 +23,10 @@ from typing import Dict, Any, List, Optional
 
 
 from backend.app.models.status import FailureClassification
+from backend.app.engine.sanitizer import sanitize_text
 
 MAX_OUTPUT_BYTES = 65536  # 64 KB ceiling
+SAFE_TARGET_REGEX = re.compile(r"^[a-zA-Z0-9_\-\./:]+$")
 
 # Strict allowlist of approved test targets mapped to requirements
 APPROVED_TARGETS: Dict[str, str] = {
@@ -85,15 +87,6 @@ class ExecutionResult:
     test_fingerprint: str
     environment_info: Dict[str, Any]
     is_timeout: bool = False
-    concise_output: str
-    duration_ms: float
-    start_time: str
-    end_time: str
-    test_names: List[str]
-    code_fingerprint: str
-    test_fingerprint: str
-    environment_info: Dict[str, Any]
-    is_timeout: bool = False
 
 
 def calculate_sha256(file_path: Path) -> str:
@@ -126,31 +119,59 @@ class SubprocessRunner:
         self.payment_test = self.project_root / "backend" / "tests" / "test_payment.py"
 
     def execute_target(self, test_target: str) -> ExecutionResult:
-        """Run a specific pre-approved test target under pytest."""
-        # Security: Enforce path traversal confinement
-        target_file_part = test_target.split("::")[0]
+        """Run a specific pre-approved test target under pytest.
+        
+        Security Controls:
+        1. Flag injection prevention: Disallow leading '-' or whitespace/flag injection.
+        2. Strict character set: Alphanumeric, underscores, hyphens, colons, dots, slashes.
+        3. Confinement: Target files must resolve strictly inside 'backend/tests/'.
+        4. Target must be an existing Python file (.py).
+        5. Pytest cache isolation to prevent lock collisions.
+        6. Secret scrubbing on stdout/stderr before storage.
+        7. Strict 64KB byte ceiling on output with UTF-8 boundary preservation.
+        """
+        if not test_target or not test_target.strip():
+            raise ValueError("Security Violation: Test target cannot be empty.")
+
+        target_str = test_target.strip()
+        if target_str.startswith("-"):
+            raise ValueError(f"Security Violation: Options/flags injection prohibited: '{test_target}'")
+
+        if not SAFE_TARGET_REGEX.match(target_str):
+            raise ValueError(f"Security Violation: Target contains invalid or metacharacters: '{test_target}'")
+
+        # Resolve alias if target is a known registered key
+        if target_str in APPROVED_TARGETS:
+            target_str = APPROVED_TARGETS[target_str]
+
+        # Security: Enforce path traversal confinement to backend/tests/
+        target_file_part = target_str.split("::")[0]
         resolved_target = (self.project_root / target_file_part).resolve()
+        tests_directory = (self.project_root / "backend" / "tests").resolve()
 
         try:
-            # Check containment within project root
-            resolved_target.relative_to(self.project_root)
+            # Check strict containment within backend/tests/
+            resolved_target.relative_to(tests_directory)
         except ValueError:
             raise ValueError(
-                f"Security Violation: Path traversal detected in test target: '{test_target}'"
+                f"Security Violation: Path traversal detected. Target '{target_file_part}' must reside strictly within 'backend/tests/'."
             )
 
-        if not resolved_target.exists():
+        if not target_file_part.endswith(".py"):
+            raise ValueError(f"Security Violation: Target must be a Python test file (.py): '{target_file_part}'")
+
+        if not resolved_target.is_file():
             raise FileNotFoundError(f"Target test file does not exist: '{target_file_part}'")
 
         cmd_args: List[str] = [
             sys.executable,
             "-m",
             "pytest",
-            test_target,
+            target_str,
             "-v",
             "--tb=short",
-            "-o",
-            "cache_dir=.pytest_cache",
+            "-p",
+            "no:cacheprovider",
         ]
         cmd_str = " ".join(cmd_args)
 
@@ -184,11 +205,14 @@ class SubprocessRunner:
             exit_code = process.returncode
             raw_stdout = process.stdout
             raw_stderr = process.stderr
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             duration_ms = (time.perf_counter() - start_clock) * 1000.0
             exit_code = -1
-            raw_stdout = ""
-            raw_stderr = f"Subprocess timed out after {self.timeout_seconds} seconds."
+            # Capture partial evidence produced before deadline
+            raw_stdout = exc.stdout if isinstance(exc.stdout, str) else (exc.stdout.decode("utf-8", errors="ignore") if exc.stdout else "")
+            raw_stderr = exc.stderr if isinstance(exc.stderr, str) else (exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else "")
+            if not raw_stderr:
+                raw_stderr = f"Subprocess timed out after {self.timeout_seconds} seconds."
             is_timeout = True
         except Exception as exc:
             duration_ms = (time.perf_counter() - start_clock) * 1000.0
@@ -199,7 +223,7 @@ class SubprocessRunner:
         end_dt = datetime.now(timezone.utc)
         end_time_iso = end_dt.isoformat()
 
-        # Enforce output limits (prevent memory bloat / DOS)
+        # Enforce output limits and secret scrubbing
         stdout = self._limit_output(raw_stdout)
         stderr = self._limit_output(raw_stderr)
         concise_output = self._extract_concise_summary(raw_stdout, raw_stderr, exit_code)
@@ -227,11 +251,13 @@ class SubprocessRunner:
         )
 
     def _limit_output(self, text: str) -> str:
-        """Enforce strict byte limit on output payloads."""
-        if len(text.encode("utf-8")) > MAX_OUTPUT_BYTES:
-            truncated = text[:MAX_OUTPUT_BYTES]
+        """Enforce strict byte limit and scrub sensitive secrets with UTF-8 boundary safety."""
+        scrubbed = sanitize_text(text)
+        encoded = scrubbed.encode("utf-8")
+        if len(encoded) > MAX_OUTPUT_BYTES:
+            truncated = encoded[:MAX_OUTPUT_BYTES].decode("utf-8", errors="ignore")
             return truncated + f"\n\n[... TRUNCATED: Output exceeded {MAX_OUTPUT_BYTES} bytes limit ...]"
-        return text
+        return scrubbed
 
     def _extract_concise_summary(self, stdout: str, stderr: str, exit_code: int) -> str:
         """Generate a concise 1-3 line summary of execution outcome."""

@@ -15,10 +15,12 @@ class Database:
         self.init_schema()
 
     def get_connection(self) -> sqlite3.Connection:
-        """Create a connection with row factory and foreign key enforcement."""
-        conn = sqlite3.connect(str(self.db_path))
+        """Create a connection with row factory, foreign key enforcement, WAL mode, and busy timeout."""
+        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA busy_timeout = 30000;")
         return conn
 
     def init_schema(self) -> None:

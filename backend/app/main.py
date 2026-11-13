@@ -8,12 +8,20 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import FastAPI, HTTPException, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.app.engine.evaluator import VerificationEvaluator
 from backend.benchmarks.harness import BenchmarkHarness, BenchmarkReport
+from backend.app.security import (
+    ALLOWED_ORIGINS,
+    validate_requirement_id,
+    validate_run_id,
+    validate_evidence_id,
+    validate_scenario_id,
+    enforce_local_access_control,
+)
 from backend.app.evidence import (
     EvidenceRecord,
     EvidenceStore,
@@ -40,12 +48,12 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Enable CORS for the React + Vite dashboard
+# Secure local CORS policy (no wildcard with credentials)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -97,20 +105,25 @@ def list_requirements_v1(
 @app.get("/api/v1/requirements/{id}", response_model=Requirement, tags=["V1 Requirements"])
 def get_requirement_v1(id: str) -> Requirement:
     """Retrieve requirement details and acceptance criteria by ID."""
-    req = repository.get_requirement(id)
+    clean_id = validate_requirement_id(id)
+    req = repository.get_requirement(clean_id)
     if not req:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Requirement '{id}' not found in registry.",
+            detail=f"Requirement '{clean_id}' not found in registry.",
         )
     return req
 
 
 @app.post("/api/v1/verify/{id}", tags=["V1 Verification"])
-def verify_requirement_v1(id: str) -> Dict[str, Any]:
+def verify_requirement_v1(
+    id: str,
+    _auth: None = Depends(enforce_local_access_control),
+) -> Dict[str, Any]:
     """Execute the approved test target for a requirement and capture evidence."""
+    clean_id = validate_requirement_id(id)
     try:
-        req, run, finding = evaluator.verify_requirement(id)
+        req, run, finding = evaluator.verify_requirement(clean_id)
         evidence_list = repository.list_evidence_for_run(run.run_id)
         return {
             "requirement": req,
@@ -123,7 +136,7 @@ def verify_requirement_v1(id: str) -> Dict[str, Any]:
 
 
 @app.post("/api/v1/verify-all", tags=["V1 Verification"])
-def verify_all_v1() -> Dict[str, Any]:
+def verify_all_v1(_auth: None = Depends(enforce_local_access_control)) -> Dict[str, Any]:
     """Run sequential verification across all registered requirements."""
     reqs = repository.list_requirements()
     results = []
@@ -152,34 +165,28 @@ def list_runs_v1(
     limit: int = Query(50, ge=1, le=200),
 ) -> List[VerificationRun]:
     """Query verification run history."""
-    return repository.list_verification_runs(requirement_id=requirement_id, limit=limit)
+    clean_req_id = validate_requirement_id(requirement_id) if requirement_id else None
+    return repository.list_verification_runs(requirement_id=clean_req_id, limit=limit)
 
 
 @app.get("/api/v1/runs/{run_id}", response_model=VerificationRun, tags=["V1 Runs"])
 def get_run_v1(run_id: str) -> VerificationRun:
     """Retrieve details and execution status of a specific verification run."""
-    run = repository.get_verification_run(run_id)
+    clean_run_id = validate_run_id(run_id)
+    run = repository.get_verification_run(clean_run_id)
     if not run:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Verification run '{run_id}' not found.",
+            detail=f"Verification run '{clean_run_id}' not found.",
         )
     return run
 
 
 @app.post("/api/v1/demonstrate/vulnerable-vs-corrected", tags=["V1 Demonstration"])
-def demonstrate_vulnerable_vs_corrected() -> Dict[str, Any]:
-    """Executes the ground-truth comparative demonstration for PAYMENT-004.
-    
-    1. Runs the adversarial test against the intentionally vulnerable test fixture:
-       - Captures real failure: 'DID NOT RAISE InsufficientFundsError'
-       - Maps exit code 1 to VIOLATION state
-       - Generates a CRITICAL finding with reproduction commands
-    2. Runs the adversarial test against the corrected implementation:
-       - Captures real pass: '1 passed'
-       - Maps exit code 0 to VERIFIED state
-    3. Preserves both runs and evidence records in SQLite.
-    """
+def demonstrate_vulnerable_vs_corrected(
+    _auth: None = Depends(enforce_local_access_control),
+) -> Dict[str, Any]:
+    """Executes the ground-truth comparative demonstration for PAYMENT-004."""
     # 1. Vulnerable run
     vuln_target = "backend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service"
     v_req, v_run, v_finding = evaluator.verify_requirement("PAYMENT-004", target_override=vuln_target)
@@ -219,13 +226,24 @@ def demonstrate_vulnerable_vs_corrected() -> Dict[str, Any]:
 @app.get("/api/v1/evidence/{evidence_id}", response_model=Evidence, tags=["V1 Evidence"])
 def get_evidence_v1(evidence_id: str) -> Evidence:
     """Retrieve an immutable evidence artifact."""
-    ev = repository.get_evidence(evidence_id)
+    clean_ev_id = validate_evidence_id(evidence_id)
+    ev = repository.get_evidence(clean_ev_id)
     if not ev:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Evidence artifact '{evidence_id}' not found.",
+            detail=f"Evidence artifact '{clean_ev_id}' not found.",
         )
     return ev
+
+
+@app.get("/api/v1/evidence/{evidence_id}/verify", tags=["V1 Evidence"])
+def verify_evidence_integrity_v1(evidence_id: str) -> Dict[str, Any]:
+    """Cryptographically verify that an evidence artifact has not been tampered with and traces to a real run."""
+    clean_ev_id = validate_evidence_id(evidence_id)
+    try:
+        return evaluator.verify_evidence_integrity(clean_ev_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
 @app.get("/api/v1/findings", response_model=List[Finding], tags=["V1 Findings"])
@@ -235,7 +253,8 @@ def list_findings_v1(
     limit: int = Query(50, ge=1, le=200),
 ) -> List[Finding]:
     """Query discovered specification violations and defects."""
-    return repository.list_findings(requirement_id=requirement_id, severity=severity, limit=limit)
+    clean_req_id = validate_requirement_id(requirement_id) if requirement_id else None
+    return repository.list_findings(requirement_id=clean_req_id, severity=severity, limit=limit)
 
 
 @app.get("/api/v1/coverage", tags=["V1 Coverage"])
@@ -247,11 +266,12 @@ def get_criteria_coverage() -> Dict[str, Any]:
 @app.get("/api/v1/coverage/{requirement_id}", tags=["V1 Coverage"])
 def get_requirement_criteria_coverage(requirement_id: str) -> Dict[str, Any]:
     """Retrieve criteria coverage and identify unverified gaps for a specific requirement."""
-    report = evaluator.analyze_coverage(requirement_id=requirement_id)
+    clean_req_id = validate_requirement_id(requirement_id)
+    report = evaluator.analyze_coverage(requirement_id=clean_req_id)
     if not report["requirements"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Requirement '{requirement_id}' not found.",
+            detail=f"Requirement '{clean_req_id}' not found.",
         )
     return report["requirements"][0]
 
@@ -261,10 +281,11 @@ def list_adversarial_scenarios(
     requirement_id: Optional[str] = Query(None, description="Filter by requirement ID")
 ) -> List[Dict[str, Any]]:
     """List explicit edge-case adversarial scenarios and record execution audit history."""
+    clean_req_id = validate_requirement_id(requirement_id) if requirement_id else None
     reqs = repository.list_requirements()
     all_scenarios = []
     for r in reqs:
-        if requirement_id and r.id != requirement_id.upper():
+        if clean_req_id and r.id != clean_req_id:
             continue
         for s in r.adversarial_scenarios:
             all_scenarios.append(s.model_dump())
@@ -285,16 +306,22 @@ def list_comparable_scenarios() -> List[Dict[str, Any]]:
 
 
 @app.post("/api/v1/compare/{scenario_id}", tags=["V1 Demonstration"])
-def compare_scenario_endpoint(scenario_id: str) -> Dict[str, Any]:
+def compare_scenario_endpoint(
+    scenario_id: str,
+    _auth: None = Depends(enforce_local_access_control),
+) -> Dict[str, Any]:
     """Execute a ground-truth before-and-after comparison showing behavior before and after a defect fix."""
+    clean_slug = validate_scenario_id(scenario_id)
     try:
-        return evaluator.compare_scenario(scenario_id)
+        return evaluator.compare_scenario(clean_slug)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
 @app.post("/api/v1/benchmark/run", response_model=BenchmarkReport, tags=["V1 Benchmark"])
-def run_benchmark_endpoint() -> BenchmarkReport:
+def run_benchmark_endpoint(
+    _auth: None = Depends(enforce_local_access_control),
+) -> BenchmarkReport:
     """Execute the independent benchmark harness comparing baseline happy-path tests vs Ghost Protocol against seeded defects."""
     global latest_benchmark_report
     latest_benchmark_report = benchmark_harness.run_benchmark()

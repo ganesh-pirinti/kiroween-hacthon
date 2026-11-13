@@ -110,5 +110,5 @@ def test_v1_demonstration_vulnerable_vs_corrected(client: TestClient) -> None:
 
 
 def test_v1_run_not_found(client: TestClient) -> None:
-    res = client.get("/api/v1/runs/nonexistent-run-id-999")
+    res = client.get("/api/v1/runs/run-nonexistent-id-999")
     assert res.status_code == 404
