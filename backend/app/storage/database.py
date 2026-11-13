@@ -33,6 +33,7 @@ class Database:
                     status TEXT NOT NULL,
                     acceptance_criteria TEXT NOT NULL,
                     linked_tests TEXT NOT NULL,
+                    adversarial_scenarios TEXT DEFAULT '[]',
                     latest_run_id TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
@@ -44,6 +45,7 @@ class Database:
                     timestamp TEXT NOT NULL,
                     command TEXT NOT NULL,
                     execution_status TEXT NOT NULL,
+                    failure_classification TEXT DEFAULT 'NONE',
                     exit_code INTEGER NOT NULL,
                     duration_ms REAL NOT NULL,
                     start_time TEXT,
@@ -74,9 +76,14 @@ class Database:
                 CREATE TABLE IF NOT EXISTS findings (
                     finding_id TEXT PRIMARY KEY,
                     requirement_id TEXT NOT NULL,
+                    run_id TEXT DEFAULT '',
+                    test_name TEXT DEFAULT '',
                     severity TEXT NOT NULL,
+                    failure_classification TEXT DEFAULT 'NONE',
                     explanation TEXT NOT NULL,
                     reproduction_instructions TEXT NOT NULL,
+                    code_fingerprint TEXT DEFAULT '',
+                    test_fingerprint TEXT DEFAULT '',
                     linked_evidence_ids TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (requirement_id) REFERENCES requirements(id) ON DELETE CASCADE
@@ -89,11 +96,24 @@ class Database:
                 """
             )
 
-            # Defensive migration for verification_runs columns
+            # Defensive migration for requirements columns
             cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(requirements);")
+            req_cols = {row["name"] for row in cursor.fetchall()}
+            if "adversarial_scenarios" not in req_cols:
+                conn.execute("ALTER TABLE requirements ADD COLUMN adversarial_scenarios TEXT DEFAULT '[]';")
+
+            # Defensive migration for verification_runs columns
             cursor.execute("PRAGMA table_info(verification_runs);")
             existing_cols = {row["name"] for row in cursor.fetchall()}
-            for col in ["start_time", "end_time", "test_names", "concise_output", "finding_ids"]:
+            for col in ["start_time", "end_time", "test_names", "concise_output", "finding_ids", "failure_classification"]:
                 if col not in existing_cols:
                     conn.execute(f"ALTER TABLE verification_runs ADD COLUMN {col} TEXT DEFAULT '';")
+
+            # Defensive migration for findings columns
+            cursor.execute("PRAGMA table_info(findings);")
+            finding_cols = {row["name"] for row in cursor.fetchall()}
+            for col in ["run_id", "test_name", "failure_classification", "code_fingerprint", "test_fingerprint"]:
+                if col not in finding_cols:
+                    conn.execute(f"ALTER TABLE findings ADD COLUMN {col} TEXT DEFAULT '';")
             conn.commit()

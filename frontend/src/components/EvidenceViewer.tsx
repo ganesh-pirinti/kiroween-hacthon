@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Evidence, VerificationRun } from '../types';
-import { Terminal, Copy, Check, ShieldCheck, Cpu, Clock, Hash } from 'lucide-react';
+import { Terminal, Copy, Check, ShieldCheck, Cpu, Clock, Hash, AlertOctagon } from 'lucide-react';
 
 interface Props {
   run: VerificationRun | null;
@@ -65,6 +65,12 @@ export const EvidenceViewer: React.FC<Props> = ({ run, evidence, isLoading }) =>
           >
             EXIT CODE {run?.exit_code}
           </span>
+          {run?.failure_classification && run.failure_classification !== 'NONE' && (
+            <span className="text-[10px] px-2 py-0.5 rounded font-bold font-mono-code bg-red-950 text-red-400 border border-red-800 flex items-center gap-1">
+              <AlertOctagon className="w-3 h-3" />
+              {run.failure_classification}
+            </span>
+          )}
         </div>
       </div>
 
@@ -120,14 +126,25 @@ export const EvidenceViewer: React.FC<Props> = ({ run, evidence, isLoading }) =>
           </div>
         </div>
 
-        {/* Code Fingerprint Card */}
+        {/* Code & Test Fingerprint Card */}
         <div className="p-3 bg-[#161b22] border border-[#30363d] rounded space-y-1.5">
           <div className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
             <Hash className="w-3.5 h-3.5 text-[#58a6ff]" />
-            Target Code Fingerprint
+            Code & Test Provenance Fingerprints
           </div>
-          <div className="font-mono-code text-[11px] text-emerald-400 break-all select-all">
-            {run?.code_fingerprint || 'UNAVAILABLE'}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[10px] font-mono-code">
+              <span className="text-slate-500">Target:</span>
+              <span className="text-emerald-400 truncate max-w-[200px]" title={run?.code_fingerprint}>
+                {run?.code_fingerprint?.slice(0, 24) || 'UNAVAILABLE'}...
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[10px] font-mono-code">
+              <span className="text-slate-500">Suite:</span>
+              <span className="text-[#58a6ff] truncate max-w-[200px]" title={run?.test_fingerprint}>
+                {run?.test_fingerprint?.slice(0, 24) || 'UNAVAILABLE'}...
+              </span>
+            </div>
           </div>
         </div>
 

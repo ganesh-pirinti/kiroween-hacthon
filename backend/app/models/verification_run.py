@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field
 
-from backend.app.models.status import ExecutionStatus
+from backend.app.models.status import ExecutionStatus, FailureClassification
 
 
 class RunSummary(BaseModel):
@@ -34,6 +34,7 @@ class VerificationRun(BaseModel):
     requirement_id: str
     command: str
     execution_status: ExecutionStatus
+    failure_classification: FailureClassification = FailureClassification.NONE
     exit_code: int
     duration_ms: float
     start_time: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

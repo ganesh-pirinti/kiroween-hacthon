@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.app.engine.evaluator import VerificationEvaluator
+from backend.benchmarks.harness import BenchmarkHarness, BenchmarkReport
 from backend.app.evidence import (
     EvidenceRecord,
     EvidenceStore,
@@ -52,6 +53,8 @@ app.add_middleware(
 db = Database(Path("evidence/evidence.db"))
 repository = StorageRepository(db)
 evaluator = VerificationEvaluator(repository)
+benchmark_harness = BenchmarkHarness()
+latest_benchmark_report: Optional[BenchmarkReport] = None
 
 # Initialize catalog on startup
 catalog_path = Path("requirements/catalog.json")
@@ -233,6 +236,78 @@ def list_findings_v1(
 ) -> List[Finding]:
     """Query discovered specification violations and defects."""
     return repository.list_findings(requirement_id=requirement_id, severity=severity, limit=limit)
+
+
+@app.get("/api/v1/coverage", tags=["V1 Coverage"])
+def get_criteria_coverage() -> Dict[str, Any]:
+    """Identify acceptance criteria with NO linked executable tests and report verification coverage."""
+    return evaluator.analyze_coverage()
+
+
+@app.get("/api/v1/coverage/{requirement_id}", tags=["V1 Coverage"])
+def get_requirement_criteria_coverage(requirement_id: str) -> Dict[str, Any]:
+    """Retrieve criteria coverage and identify unverified gaps for a specific requirement."""
+    report = evaluator.analyze_coverage(requirement_id=requirement_id)
+    if not report["requirements"]:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Requirement '{requirement_id}' not found.",
+        )
+    return report["requirements"][0]
+
+
+@app.get("/api/v1/adversarial-scenarios", tags=["V1 Adversarial"])
+def list_adversarial_scenarios(
+    requirement_id: Optional[str] = Query(None, description="Filter by requirement ID")
+) -> List[Dict[str, Any]]:
+    """List explicit edge-case adversarial scenarios and record execution audit history."""
+    reqs = repository.list_requirements()
+    all_scenarios = []
+    for r in reqs:
+        if requirement_id and r.id != requirement_id.upper():
+            continue
+        for s in r.adversarial_scenarios:
+            all_scenarios.append(s.model_dump())
+    return all_scenarios
+
+
+@app.get("/api/v1/scenarios", tags=["V1 Demonstration"])
+def list_comparable_scenarios() -> List[Dict[str, Any]]:
+    """List available before-and-after comparison scenarios."""
+    return [
+        {
+            "scenario_id": "SCENARIO-PAYMENT-004",
+            "requirement_id": "PAYMENT-004",
+            "title": "Overdraft Prevention and Balance Preservation",
+            "description": "₹15,000 transfer from ₹10,000 balance: vulnerable fixture allows illegal transfer vs corrected engine aborts atomically.",
+        }
+    ]
+
+
+@app.post("/api/v1/compare/{scenario_id}", tags=["V1 Demonstration"])
+def compare_scenario_endpoint(scenario_id: str) -> Dict[str, Any]:
+    """Execute a ground-truth before-and-after comparison showing behavior before and after a defect fix."""
+    try:
+        return evaluator.compare_scenario(scenario_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@app.post("/api/v1/benchmark/run", response_model=BenchmarkReport, tags=["V1 Benchmark"])
+def run_benchmark_endpoint() -> BenchmarkReport:
+    """Execute the independent benchmark harness comparing baseline happy-path tests vs Ghost Protocol against seeded defects."""
+    global latest_benchmark_report
+    latest_benchmark_report = benchmark_harness.run_benchmark()
+    return latest_benchmark_report
+
+
+@app.get("/api/v1/benchmark/latest", response_model=BenchmarkReport, tags=["V1 Benchmark"])
+def get_latest_benchmark_report() -> BenchmarkReport:
+    """Retrieve the latest executed benchmark report."""
+    global latest_benchmark_report
+    if not latest_benchmark_report:
+        latest_benchmark_report = benchmark_harness.run_benchmark()
+    return latest_benchmark_report
 
 
 # -----------------------------------------------------------------

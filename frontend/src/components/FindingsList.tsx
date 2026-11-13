@@ -49,9 +49,19 @@ export const FindingsList: React.FC<Props> = ({ findings, onSelectRequirement })
                   >
                     {f.severity}
                   </span>
+                  {f.failure_classification && f.failure_classification !== 'NONE' && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded font-mono-code bg-red-950 text-red-300 border border-red-800">
+                      {f.failure_classification}
+                    </span>
+                  )}
                   <span className="font-mono-code text-xs font-bold text-white">
                     {f.finding_id}
                   </span>
+                  {f.run_id && (
+                    <span className="text-[10px] font-mono-code text-slate-500">
+                      via {f.run_id}
+                    </span>
+                  )}
                   <span className="text-xs text-[#8b949e]">on</span>
                   <button
                     onClick={() => onSelectRequirement(f.requirement_id)}

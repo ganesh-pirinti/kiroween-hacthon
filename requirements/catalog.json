@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "project": "Ghost Protocol",
   "requirements": [
     {
@@ -10,15 +10,31 @@
       "acceptance_criteria": [
         {
           "id": "AC-01.1",
-          "description": "Initial balance >= 0 succeeds and sets balance accurately."
+          "description": "Initial balance >= 0 succeeds and sets balance accurately.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentBasics::test_account_initialization_non_negative",
+          "status": "UNVERIFIED"
         },
         {
           "id": "AC-01.2",
-          "description": "Initial balance < 0 raises InvalidAmountError and prevents account creation."
+          "description": "Initial balance < 0 raises InvalidAmountError and prevents account creation.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentBasics::test_account_initialization_non_negative",
+          "status": "UNVERIFIED"
         }
       ],
       "linked_tests": [
         "backend/tests/test_payment.py::TestPaymentBasics::test_account_initialization_non_negative"
+      ],
+      "adversarial_scenarios": [
+        {
+          "scenario_id": "ADV-PAY-001-BOUNDARY-NEG",
+          "requirement_id": "PAYMENT-001",
+          "title": "Negative Initial Balance Attack",
+          "description": "Attempt to initialize an account with -₹100 must be rejected with InvalidAmountError.",
+          "category": "negative",
+          "test_target": "backend/tests/test_payment.py::TestPaymentBasics::test_account_initialization_non_negative",
+          "executed": false,
+          "outcome": null
+        }
       ]
     },
     {
@@ -29,42 +45,95 @@
       "acceptance_criteria": [
         {
           "id": "AC-02.1",
-          "description": "Transfer amount of 0 raises InvalidAmountError."
+          "description": "Transfer amount of 0 raises InvalidAmountError.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentBasics::test_negative_or_zero_amount_rejected",
+          "status": "UNVERIFIED"
         },
         {
           "id": "AC-02.2",
-          "description": "Negative transfer amounts raise InvalidAmountError."
+          "description": "Negative transfer amounts raise InvalidAmountError.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentBasics::test_negative_or_zero_amount_rejected",
+          "status": "UNVERIFIED"
         },
         {
           "id": "AC-02.3",
-          "description": "Both account balances remain unchanged."
+          "description": "Both account balances remain unchanged.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentBasics::test_negative_or_zero_amount_rejected",
+          "status": "UNVERIFIED"
         }
       ],
       "linked_tests": [
         "backend/tests/test_payment.py::TestPaymentBasics::test_negative_or_zero_amount_rejected"
+      ],
+      "adversarial_scenarios": [
+        {
+          "scenario_id": "ADV-PAY-002-NEGATIVE-ATTACK",
+          "requirement_id": "PAYMENT-002",
+          "title": "Negative Transfer Credit Injection",
+          "description": "Transfer of -₹500 must not siphon recipient balance or credit sender.",
+          "category": "negative",
+          "test_target": "backend/tests/test_payment.py::TestPaymentBasics::test_negative_or_zero_amount_rejected",
+          "executed": false,
+          "outcome": null
+        },
+        {
+          "scenario_id": "ADV-PAY-002-ZERO-TRANSFER",
+          "requirement_id": "PAYMENT-002",
+          "title": "Zero-Amount Null Transaction Attempt",
+          "description": "Transfer of exactly ₹0 must be aborted with InvalidAmountError.",
+          "category": "boundary",
+          "test_target": "backend/tests/test_payment.py::TestPaymentBasics::test_negative_or_zero_amount_rejected",
+          "executed": false,
+          "outcome": null
+        }
       ]
     },
     {
       "id": "PAYMENT-003",
-      "title": "Successful Balance Transfer",
+      "title": "Successful Balance Transfer and Conservation",
       "description": "When transfer amount <= sender balance, sender is debited, recipient is credited, and total funds are conserved.",
       "status": "UNVERIFIED",
       "acceptance_criteria": [
         {
           "id": "AC-03.1",
-          "description": "Sender debited by amount, recipient credited by exact amount."
+          "description": "Sender debited by amount, recipient credited by exact amount.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentTransfers::test_valid_transfer_updates_balances",
+          "status": "UNVERIFIED"
         },
         {
           "id": "AC-03.2",
-          "description": "Conservation of total balances across accounts."
+          "description": "Conservation of total balances across accounts (no phantom creation/leak).",
+          "linked_test": "backend/tests/test_property_payment.py::TestPaymentInvariants::test_monetary_conservation_property",
+          "status": "UNVERIFIED"
         },
         {
           "id": "AC-03.3",
-          "description": "TransferResult status is SUCCESS."
+          "description": "TransferResult status is SUCCESS.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentTransfers::test_valid_transfer_updates_balances",
+          "status": "UNVERIFIED"
+        },
+        {
+          "id": "AC-03.4",
+          "description": "Ledger audit transaction event broadcasted to secure compliance log stream.",
+          "linked_test": null,
+          "status": "UNVERIFIED"
         }
       ],
       "linked_tests": [
-        "backend/tests/test_payment.py::TestPaymentTransfers::test_valid_transfer_updates_balances"
+        "backend/tests/test_payment.py::TestPaymentTransfers::test_valid_transfer_updates_balances",
+        "backend/tests/test_property_payment.py::TestPaymentInvariants::test_monetary_conservation_property"
+      ],
+      "adversarial_scenarios": [
+        {
+          "scenario_id": "ADV-PAY-003-DRAIN-ACCOUNT",
+          "requirement_id": "PAYMENT-003",
+          "title": "Exact Balance Exhaustion",
+          "description": "Transfer entire available balance leaving sender balance at exactly ₹0.",
+          "category": "boundary",
+          "test_target": "backend/tests/test_payment.py::TestPaymentTransfers::test_valid_transfer_updates_balances",
+          "executed": false,
+          "outcome": null
+        }
       ]
     },
     {
@@ -75,23 +144,65 @@
       "acceptance_criteria": [
         {
           "id": "AC-04.1",
-          "description": "Transfer attempt exceeding available balance raises InsufficientFundsError."
+          "description": "Transfer attempt exceeding available balance raises InsufficientFundsError.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged",
+          "status": "UNVERIFIED"
         },
         {
           "id": "AC-04.2",
-          "description": "Sender balance strictly remains at initial level (₹10,000 in baseline)."
+          "description": "Sender balance strictly remains at initial level (₹10,000 in baseline).",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged",
+          "status": "UNVERIFIED"
         },
         {
           "id": "AC-04.3",
-          "description": "Recipient balance strictly remains at initial level (₹0 in baseline)."
+          "description": "Recipient balance strictly remains at initial level (₹0 in baseline).",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged",
+          "status": "UNVERIFIED"
         },
         {
           "id": "AC-04.4",
-          "description": "Operation is atomic; zero partial mutation allowed."
+          "description": "Operation is atomic; zero partial mutation allowed.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentAdversarial::test_boundary_overdraft_rejected",
+          "status": "UNVERIFIED"
         }
       ],
       "linked_tests": [
-        "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged"
+        "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged",
+        "backend/tests/test_payment.py::TestPaymentAdversarial::test_boundary_overdraft_rejected",
+        "backend/tests/test_property_payment.py::TestPaymentInvariants::test_idempotency_of_rejected_overdraft_property"
+      ],
+      "adversarial_scenarios": [
+        {
+          "scenario_id": "ADV-PAY-004-OVERDRAFT",
+          "requirement_id": "PAYMENT-004",
+          "title": "Gross Overdraft Protection Check",
+          "description": "Attempt to transfer ₹15,000 from ₹10,000 balance.",
+          "category": "boundary",
+          "test_target": "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged",
+          "executed": false,
+          "outcome": null
+        },
+        {
+          "scenario_id": "ADV-PAY-004-BOUNDARY",
+          "requirement_id": "PAYMENT-004",
+          "title": "Micro-Overdraft Boundary Condition",
+          "description": "Transfer ₹10,000.01 from ₹10,000.00 balance (one cent overdraft).",
+          "category": "boundary",
+          "test_target": "backend/tests/test_payment.py::TestPaymentAdversarial::test_boundary_overdraft_rejected",
+          "executed": false,
+          "outcome": null
+        },
+        {
+          "scenario_id": "ADV-PAY-004-IDEMPOTENCY",
+          "requirement_id": "PAYMENT-004",
+          "title": "Randomized Overdraft Idempotency Verification",
+          "description": "25 randomized overdraft operations must all produce zero state mutation.",
+          "category": "invariant",
+          "test_target": "backend/tests/test_property_payment.py::TestPaymentInvariants::test_idempotency_of_rejected_overdraft_property",
+          "executed": false,
+          "outcome": null
+        }
       ]
     },
     {
@@ -102,15 +213,31 @@
       "acceptance_criteria": [
         {
           "id": "AC-05.1",
-          "description": "sender_id == recipient_id raises SelfTransferError."
+          "description": "sender_id == recipient_id raises SelfTransferError.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentTransfers::test_self_transfer_rejected",
+          "status": "UNVERIFIED"
         },
         {
           "id": "AC-05.2",
-          "description": "Account balance remains unchanged."
+          "description": "Account balance remains unchanged.",
+          "linked_test": "backend/tests/test_payment.py::TestPaymentTransfers::test_self_transfer_rejected",
+          "status": "UNVERIFIED"
         }
       ],
       "linked_tests": [
         "backend/tests/test_payment.py::TestPaymentTransfers::test_self_transfer_rejected"
+      ],
+      "adversarial_scenarios": [
+        {
+          "scenario_id": "ADV-PAY-005-SELF-TRANSFER",
+          "requirement_id": "PAYMENT-005",
+          "title": "Loopback Identity Attack",
+          "description": "Attempt to transfer funds where sender and recipient accounts are identical.",
+          "category": "negative",
+          "test_target": "backend/tests/test_payment.py::TestPaymentTransfers::test_self_transfer_rejected",
+          "executed": false,
+          "outcome": null
+        }
       ]
     },
     {
@@ -121,10 +248,24 @@
       "acceptance_criteria": [
         {
           "id": "AC-06.1",
-          "description": "Transfers > ₹1,000,000 enter PENDING_APPROVAL status."
+          "description": "Transfers > ₹1,000,000 enter PENDING_APPROVAL status.",
+          "linked_test": null,
+          "status": "UNVERIFIED"
         }
       ],
-      "linked_tests": []
+      "linked_tests": [],
+      "adversarial_scenarios": [
+        {
+          "scenario_id": "ADV-PAY-006-HIGH-VALUE",
+          "requirement_id": "PAYMENT-006",
+          "title": "High-Value Authorization Boundary Test",
+          "description": "Attempt corporate transfer of ₹1,000,000.01 without secondary approval token.",
+          "category": "boundary",
+          "test_target": "backend/tests/test_payment.py::TestPaymentTransfers::test_high_value_dual_auth",
+          "executed": false,
+          "outcome": null
+        }
+      ]
     }
   ]
 }

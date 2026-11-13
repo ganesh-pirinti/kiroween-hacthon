@@ -44,3 +44,18 @@ class ArtifactType(str, Enum):
     TEST_REPORT = "TEST_REPORT"
     TRACE = "TRACE"
     CODE_DIFF = "CODE_DIFF"
+
+
+class FailureClassification(str, Enum):
+    """Fine-grained classification of test and runner failures.
+    
+    Distinguishes genuine requirement violations from environmental,
+    collection, or test harness anomalies.
+    """
+    NONE = "NONE"                                      # Clean pass (exit code 0)
+    ASSERTION_FAILURE = "ASSERTION_FAILURE"            # Genuine spec violation / failed assertion (exit code 1)
+    TEST_INFRASTRUCTURE_ERROR = "TEST_INFRASTRUCTURE_ERROR"  # Pytest usage/plugin/syntax error (exit codes 2, 4)
+    TIMEOUT = "TIMEOUT"                                # Subprocess deadline exceeded
+    BLOCKED_EXECUTION = "BLOCKED_EXECUTION"            # Launch failure, OS permission, environment block
+    UNCOLLECTED_TESTS = "UNCOLLECTED_TESTS"            # 0 tests matched/collected (exit code 5)
+

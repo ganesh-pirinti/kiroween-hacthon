@@ -15,6 +15,7 @@ import { EvidenceViewer } from './components/EvidenceViewer';
 import { FindingsList } from './components/FindingsList';
 import { DemonstrationModal } from './components/DemonstrationModal';
 import { StatusGlossaryModal } from './components/StatusGlossaryModal';
+import { BenchmarkModal } from './components/BenchmarkModal';
 import { ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -37,6 +38,7 @@ export const App: React.FC = () => {
   const [demonstrationResult, setDemonstrationResult] = useState<DemonstrationResult | null>(null);
   const [showDemoModal, setShowDemoModal] = useState<boolean>(false);
   const [showGlossaryModal, setShowGlossaryModal] = useState<boolean>(false);
+  const [showBenchmarkModal, setShowBenchmarkModal] = useState<boolean>(false);
 
   // Load Initial Data
   const loadInitialData = useCallback(async () => {
@@ -291,6 +293,7 @@ export const App: React.FC = () => {
           onVerifyAll={handleVerifyAll}
           onRunDemonstration={handleRunDemonstration}
           onOpenGlossary={() => setShowGlossaryModal(true)}
+          onOpenBenchmark={() => setShowBenchmarkModal(true)}
           isVerifyingAll={isVerifyingAll}
           isDemonstrating={isDemonstrating}
         />
@@ -344,6 +347,11 @@ export const App: React.FC = () => {
       <StatusGlossaryModal
         isOpen={showGlossaryModal}
         onClose={() => setShowGlossaryModal(false)}
+      />
+
+      <BenchmarkModal
+        isOpen={showBenchmarkModal}
+        onClose={() => setShowBenchmarkModal(false)}
       />
     </div>
   );

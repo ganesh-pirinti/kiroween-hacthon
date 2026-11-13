@@ -1,4 +1,7 @@
 import {
+  AdversarialScenario,
+  BenchmarkReport,
+  CoverageReport,
   DemonstrationResult,
   Evidence,
   Finding,
@@ -75,4 +78,27 @@ export const api = {
     fetchJson<DemonstrationResult>(`${API_BASE}/demonstrate/vulnerable-vs-corrected`, {
       method: 'POST',
     }),
+
+  getCoverage: (): Promise<CoverageReport> =>
+    fetchJson<CoverageReport>(`${API_BASE}/coverage`),
+
+  getAdversarialScenarios: (requirementId?: string): Promise<AdversarialScenario[]> => {
+    const url = requirementId
+      ? `${API_BASE}/adversarial-scenarios?requirement_id=${encodeURIComponent(requirementId)}`
+      : `${API_BASE}/adversarial-scenarios`;
+    return fetchJson<AdversarialScenario[]>(url);
+  },
+
+  compareScenario: (scenarioId: string): Promise<any> =>
+    fetchJson(`${API_BASE}/compare/${encodeURIComponent(scenarioId)}`, {
+      method: 'POST',
+    }),
+
+  runBenchmark: (): Promise<BenchmarkReport> =>
+    fetchJson<BenchmarkReport>(`${API_BASE}/benchmark/run`, {
+      method: 'POST',
+    }),
+
+  getLatestBenchmark: (): Promise<BenchmarkReport> =>
+    fetchJson<BenchmarkReport>(`${API_BASE}/benchmark/latest`),
 };

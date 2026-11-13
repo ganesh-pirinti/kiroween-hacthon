@@ -1,7 +1,7 @@
 import React from 'react';
 import { Requirement, VerificationRun } from '../types';
 import { StatusBadge } from './StatusBadge';
-import { Play, Clock, FileCode, CheckSquare, Terminal } from 'lucide-react';
+import { Play, Clock, FileCode, CheckSquare, Terminal, ShieldAlert, AlertTriangle } from 'lucide-react';
 
 interface Props {
   requirement: Requirement | null;
@@ -28,6 +28,10 @@ export const InvestigationDetail: React.FC<Props> = ({
     );
   }
 
+  const uncoveredCriteria = requirement.acceptance_criteria.filter(
+    (ac) => !ac.linked_test || !ac.linked_test.trim()
+  );
+
   return (
     <div className="bg-[#0d1117] border border-[#242b38] rounded-lg p-5 space-y-6">
       {/* Requirement Header */}
@@ -38,6 +42,12 @@ export const InvestigationDetail: React.FC<Props> = ({
               {requirement.id}
             </span>
             <StatusBadge status={requirement.status} size="md" />
+            {uncoveredCriteria.length > 0 && (
+              <span className="flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/80">
+                <AlertTriangle className="w-3 h-3" />
+                {uncoveredCriteria.length} Criteria Gap{uncoveredCriteria.length > 1 ? 's' : ''} (UNVERIFIED)
+              </span>
+            )}
           </div>
           <h2 className="text-lg font-bold text-white mt-2">{requirement.title}</h2>
           <p className="text-xs text-[#8b949e] mt-1 leading-relaxed max-w-2xl">
@@ -57,24 +67,127 @@ export const InvestigationDetail: React.FC<Props> = ({
 
       {/* Acceptance Criteria Checklist */}
       <div className="space-y-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#8b949e] flex items-center gap-2">
-          <CheckSquare className="w-4 h-4 text-[#58a6ff]" />
-          Acceptance Criteria Checklist
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#8b949e] flex items-center gap-2">
+            <CheckSquare className="w-4 h-4 text-[#58a6ff]" />
+            Acceptance Criteria & Test Linkage ({requirement.acceptance_criteria.length})
+          </h3>
+          <span className="text-[11px] text-[#8b949e]">
+            {requirement.acceptance_criteria.length - uncoveredCriteria.length} Covered | {uncoveredCriteria.length} Unverified
+          </span>
+        </div>
+
         <div className="grid grid-cols-1 gap-2">
-          {requirement.acceptance_criteria.map((ac) => (
-            <div
-              key={ac.id}
-              className="flex items-start gap-2.5 p-3 rounded bg-[#161b22] border border-[#30363d] text-xs text-slate-200"
-            >
-              <span className="font-mono-code font-bold text-[#58a6ff] text-[11px] shrink-0 mt-0.5">
-                {ac.id}
-              </span>
-              <span className="leading-relaxed">{ac.description}</span>
-            </div>
-          ))}
+          {requirement.acceptance_criteria.map((ac) => {
+            const hasTest = !!ac.linked_test && ac.linked_test.trim().length > 0;
+            return (
+              <div
+                key={ac.id}
+                className={`p-3 rounded bg-[#161b22] border text-xs text-slate-200 transition-colors ${
+                  hasTest ? 'border-[#30363d]' : 'border-amber-800/60 bg-amber-950/20'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono-code font-bold text-[#58a6ff] text-[11px] shrink-0 mt-0.5">
+                      {ac.id}
+                    </span>
+                    <div>
+                      <span className="leading-relaxed">{ac.description}</span>
+                      {hasTest ? (
+                        <div className="font-mono-code text-[10px] text-emerald-400 mt-1 truncate max-w-lg">
+                          Bound: {ac.linked_test}
+                        </div>
+                      ) : (
+                        <div className="font-mono-code text-[10px] text-amber-400 mt-1 flex items-center gap-1">
+                          ⚠️ No executable test bound to this criterion. Evaluates strictly as UNVERIFIED.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="shrink-0">
+                    {hasTest ? (
+                      <span
+                        className={`text-[10px] font-bold font-mono-code px-2 py-0.5 rounded border ${
+                          ac.status === 'VERIFIED'
+                            ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                            : ac.status === 'VIOLATION'
+                            ? 'bg-red-950 text-red-400 border-red-800'
+                            : 'bg-slate-900 text-slate-400 border-slate-700'
+                        }`}
+                      >
+                        {ac.status || 'UNVERIFIED'}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold font-mono-code px-2 py-0.5 rounded border bg-amber-950 text-amber-400 border-amber-800">
+                        GAP: UNVERIFIED
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {/* Adversarial Scenarios Section */}
+      {requirement.adversarial_scenarios && requirement.adversarial_scenarios.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#8b949e] flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-red-400" />
+            Adversarial & Boundary Scenarios ({requirement.adversarial_scenarios.length})
+          </h3>
+          <div className="grid grid-cols-1 gap-2">
+            {requirement.adversarial_scenarios.map((sc) => (
+              <div
+                key={sc.scenario_id}
+                className="p-3 bg-[#161b22] border border-[#30363d] rounded text-xs text-slate-300 flex items-start justify-between gap-3"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono-code text-[11px] font-bold text-red-400">{sc.scenario_id}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 uppercase font-bold font-mono-code">
+                      {sc.category}
+                    </span>
+                    <span className="font-semibold text-white">{sc.title}</span>
+                  </div>
+                  <div className="text-[11px] text-[#8b949e] mt-1">{sc.description}</div>
+                  <div className="font-mono-code text-[10px] text-slate-500 mt-1 truncate max-w-lg">
+                    Target: {sc.test_target}
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  {sc.executed ? (
+                    <div>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded font-bold font-mono-code border ${
+                          sc.outcome === 'VERIFIED'
+                            ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                            : 'bg-red-950 text-red-400 border-red-800'
+                        }`}
+                      >
+                        EXECUTED: {sc.outcome || 'DONE'}
+                      </span>
+                      {sc.executed_at && (
+                        <div className="text-[10px] text-slate-500 mt-1 font-mono-code">
+                          {new Date(sc.executed_at).toLocaleTimeString()}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] px-2 py-0.5 rounded font-bold font-mono-code bg-slate-900 text-slate-500 border border-slate-800">
+                      NOT EXECUTED
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Bound Test Targets */}
       <div className="space-y-2">
@@ -148,6 +261,11 @@ export const InvestigationDetail: React.FC<Props> = ({
                       >
                         EXIT {run.exit_code}
                       </span>
+                      {run.failure_classification && run.failure_classification !== 'NONE' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-bold font-mono-code bg-red-950/80 text-red-300 border border-red-800/80">
+                          {run.failure_classification}
+                        </span>
+                      )}
                       {run.finding_ids && run.finding_ids.length > 0 && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-red-900 text-white">
                           {run.finding_ids.length} Finding

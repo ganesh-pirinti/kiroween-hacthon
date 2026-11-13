@@ -1,6 +1,6 @@
 import React from 'react';
 import { Requirement, SystemHealth } from '../types';
-import { ShieldAlert, Play, FlaskConical, HelpCircle, Activity } from 'lucide-react';
+import { ShieldAlert, Play, FlaskConical, HelpCircle, Activity, BarChart3 } from 'lucide-react';
 
 interface Props {
   requirements: Requirement[];
@@ -8,6 +8,7 @@ interface Props {
   onVerifyAll: () => Promise<void>;
   onRunDemonstration: () => Promise<void>;
   onOpenGlossary: () => void;
+  onOpenBenchmark: () => void;
   isVerifyingAll: boolean;
   isDemonstrating: boolean;
 }
@@ -18,6 +19,7 @@ export const InvestigationOverview: React.FC<Props> = ({
   onVerifyAll,
   onRunDemonstration,
   onOpenGlossary,
+  onOpenBenchmark,
   isVerifyingAll,
   isDemonstrating,
 }) => {
@@ -66,6 +68,15 @@ export const InvestigationOverview: React.FC<Props> = ({
           >
             <HelpCircle className="w-3.5 h-3.5" />
             Verification Model
+          </button>
+
+          <button
+            onClick={onOpenBenchmark}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#58a6ff] hover:text-white bg-[#161b22] hover:bg-[#1f6feb]/20 border border-[#1f6feb]/40 rounded-md transition-colors"
+            title="Run Independent Benchmark against Seeded Defects"
+          >
+            <BarChart3 className="w-3.5 h-3.5 text-[#58a6ff]" />
+            Seeded Benchmark
           </button>
 
           <button

@@ -92,3 +92,47 @@ class TestPaymentInvariants:
 
             assert service.get_account("S_NONPOS").balance == Decimal("10000")
             assert service.get_account("R_NONPOS").balance == Decimal("1000")
+
+    def test_boundary_monotonicity_property(self, service: PaymentService) -> None:
+        """Invariant: If amount X fails due to insufficient balance, all Y > X must also fail."""
+        rng = random.Random(2024)
+        service.create_account("S_MONO", "Sender", Decimal("5000.00"))
+        service.create_account("R_MONO", "Recipient", Decimal("100.00"))
+
+        base_overdraft = Decimal("5000.01")
+        # Base overdraft must fail
+        with pytest.raises(InsufficientFundsError):
+            service.transfer("S_MONO", "R_MONO", base_overdraft)
+
+        # Any strictly larger amount must also fail monotonically
+        for _ in range(30):
+            delta = Decimal(str(rng.randint(1, 100000))) + Decimal("0.05")
+            larger_amount = base_overdraft + delta
+            with pytest.raises(InsufficientFundsError):
+                service.transfer("S_MONO", "R_MONO", larger_amount)
+
+            # Neither account balance may mutate
+            assert service.get_account("S_MONO").balance == Decimal("5000.00")
+            assert service.get_account("R_MONO").balance == Decimal("100.00")
+
+    def test_balance_non_negativity_invariants_across_operations(self, service: PaymentService) -> None:
+        """Invariant: Across 100 mixed valid/invalid transactions, no account balance is ever negative."""
+        rng = random.Random(7777)
+        acc_ids = [f"ACC_{i}" for i in range(5)]
+        for acc_id in acc_ids:
+            service.create_account(acc_id, f"User {acc_id}", Decimal("2000.00"))
+
+        for _ in range(100):
+            s_id = rng.choice(acc_ids)
+            r_id = rng.choice(acc_ids)
+            amt = Decimal(str(rng.randint(-500, 3000)))
+            try:
+                service.transfer(s_id, r_id, amt)
+            except (InsufficientFundsError, InvalidAmountError, SelfTransferError):
+                pass
+
+            # Invariant: Every account balance >= 0
+            for check_id in acc_ids:
+                bal = service.get_account(check_id).balance
+                assert bal >= Decimal("0"), f"Account {check_id} went negative: {bal}"
+

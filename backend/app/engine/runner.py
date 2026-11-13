@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 
+from backend.app.models.status import FailureClassification
+
 MAX_OUTPUT_BYTES = 65536  # 64 KB ceiling
 
 # Strict allowlist of approved test targets mapped to requirements
@@ -30,10 +32,40 @@ APPROVED_TARGETS: Dict[str, str] = {
     "PAYMENT-002": "backend/tests/test_payment.py::TestPaymentBasics::test_negative_or_zero_amount_rejected",
     "PAYMENT-003": "backend/tests/test_payment.py::TestPaymentTransfers::test_valid_transfer_updates_balances",
     "PAYMENT-004": "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged",
+    "PAYMENT-004-BOUNDARY": "backend/tests/test_payment.py::TestPaymentAdversarial::test_boundary_overdraft_rejected",
     "PAYMENT-004-VULN": "backend/tests/test_adversarial_vulnerable.py::test_adversarial_overdraft_on_vulnerable_service",
     "PAYMENT-005": "backend/tests/test_payment.py::TestPaymentTransfers::test_self_transfer_rejected",
+    "PROP-CONSERVATION": "backend/tests/test_property_payment.py::TestPaymentInvariants::test_monetary_conservation_property",
+    "PROP-IDEMPOTENCY": "backend/tests/test_property_payment.py::TestPaymentInvariants::test_idempotency_of_rejected_overdraft_property",
+    "PROP-ZERO-NEG": "backend/tests/test_property_payment.py::TestPaymentInvariants::test_boundary_zero_and_negative_rejection_property",
+    "PROP-MONO": "backend/tests/test_property_payment.py::TestPaymentInvariants::test_boundary_monotonicity_property",
+    "PROP-NONNEG": "backend/tests/test_property_payment.py::TestPaymentInvariants::test_balance_non_negativity_invariants_across_operations",
     "SUITE-PAYMENT": "backend/tests/test_payment.py",
+    "SUITE-PROP": "backend/tests/test_property_payment.py",
 }
+
+
+def classify_execution(exit_code: int, stdout: str, stderr: str, is_timeout: bool) -> FailureClassification:
+    """Classifies an execution outcome distinguishing assertion failures from environmental or harness issues."""
+    if is_timeout:
+        return FailureClassification.TIMEOUT
+    if exit_code == 0:
+        return FailureClassification.NONE
+    if exit_code == 5:
+        return FailureClassification.UNCOLLECTED_TESTS
+    if exit_code in (2, 4):
+        return FailureClassification.TEST_INFRASTRUCTURE_ERROR
+    if exit_code < 0 or exit_code == 3:
+        return FailureClassification.BLOCKED_EXECUTION
+    if exit_code == 1:
+        # Check if exit code 1 was caused by an assertion/spec failure or a code syntax/import crash
+        if "SyntaxError" in stderr or "ImportError" in stderr or "ModuleNotFoundError" in stderr:
+            return FailureClassification.TEST_INFRASTRUCTURE_ERROR
+        assertion_signals = ["AssertionError", "Failed: DID NOT RAISE", "assert ", "FAILED "]
+        if any(s in stdout for s in assertion_signals):
+            return FailureClassification.ASSERTION_FAILURE
+        return FailureClassification.ASSERTION_FAILURE
+    return FailureClassification.BLOCKED_EXECUTION
 
 
 @dataclass
@@ -41,8 +73,18 @@ class ExecutionResult:
     """Raw outcome from an isolated test run."""
     command: str
     exit_code: int
+    failure_classification: FailureClassification
     stdout: str
     stderr: str
+    concise_output: str
+    duration_ms: float
+    start_time: str
+    end_time: str
+    test_names: List[str]
+    code_fingerprint: str
+    test_fingerprint: str
+    environment_info: Dict[str, Any]
+    is_timeout: bool = False
     concise_output: str
     duration_ms: float
     start_time: str
@@ -162,10 +204,12 @@ class SubprocessRunner:
         stderr = self._limit_output(raw_stderr)
         concise_output = self._extract_concise_summary(raw_stdout, raw_stderr, exit_code)
         test_names = self._parse_test_names(raw_stdout)
+        failure_classification = classify_execution(exit_code, stdout, stderr, is_timeout)
 
         return ExecutionResult(
             command=cmd_str,
             exit_code=exit_code,
+            failure_classification=failure_classification,
             stdout=stdout,
             stderr=stderr,
             concise_output=concise_output,

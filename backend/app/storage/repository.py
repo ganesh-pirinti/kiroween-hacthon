@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import List, Optional
 
 from backend.app.models.evidence import Evidence, IntegrityMetadata
 from backend.app.models.finding import Finding
 from backend.app.models.requirement import Requirement
-from backend.app.models.status import ArtifactType, ExecutionStatus, FindingSeverity, VerificationStatus
+from backend.app.models.adversarial import AdversarialScenario
+from backend.app.models.status import (
+    ArtifactType,
+    ExecutionStatus,
+    FailureClassification,
+    FindingSeverity,
+    VerificationStatus,
+)
 from backend.app.models.verification_run import RunSummary, VerificationRun
 from backend.app.storage.database import Database
 
@@ -28,10 +36,19 @@ class StorageRepository:
         with self.db.get_connection() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO requirements (
+                INSERT INTO requirements (
                     id, title, description, status, acceptance_criteria,
-                    linked_tests, latest_run_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    linked_tests, adversarial_scenarios, latest_run_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    description = excluded.description,
+                    status = excluded.status,
+                    acceptance_criteria = excluded.acceptance_criteria,
+                    linked_tests = excluded.linked_tests,
+                    adversarial_scenarios = excluded.adversarial_scenarios,
+                    latest_run_id = excluded.latest_run_id,
+                    updated_at = excluded.updated_at
                 """,
                 (
                     requirement.id,
@@ -40,6 +57,7 @@ class StorageRepository:
                     requirement.status.value,
                     json.dumps([c.model_dump() for c in requirement.acceptance_criteria]),
                     json.dumps(requirement.linked_tests),
+                    json.dumps([s.model_dump() for s in requirement.adversarial_scenarios]),
                     requirement.latest_run_id,
                     requirement.created_at,
                     requirement.updated_at,
@@ -100,10 +118,10 @@ class StorageRepository:
                 """
                 INSERT OR REPLACE INTO verification_runs (
                     run_id, requirement_id, timestamp, command, execution_status,
-                    exit_code, duration_ms, start_time, end_time, test_names,
-                    concise_output, finding_ids, summary, code_fingerprint,
+                    failure_classification, exit_code, duration_ms, start_time, end_time,
+                    test_names, concise_output, finding_ids, summary, code_fingerprint,
                     test_fingerprint, environment_info
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run.run_id,
@@ -111,6 +129,7 @@ class StorageRepository:
                     run.timestamp,
                     run.command,
                     run.execution_status.value,
+                    run.failure_classification.value,
                     run.exit_code,
                     run.duration_ms,
                     run.start_time,
@@ -220,16 +239,22 @@ class StorageRepository:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO findings (
-                    finding_id, requirement_id, severity, explanation,
-                    reproduction_instructions, linked_evidence_ids, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    finding_id, requirement_id, run_id, test_name, severity,
+                    failure_classification, explanation, reproduction_instructions,
+                    code_fingerprint, test_fingerprint, linked_evidence_ids, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     finding.finding_id,
                     finding.requirement_id,
+                    finding.run_id,
+                    finding.test_name,
                     finding.severity.value,
+                    finding.failure_classification.value,
                     finding.explanation,
                     finding.reproduction_instructions,
+                    finding.code_fingerprint,
+                    finding.test_fingerprint,
                     json.dumps(finding.linked_evidence_ids),
                     finding.created_at,
                 ),
@@ -274,6 +299,12 @@ class StorageRepository:
     # Row Deserialization Helpers
     # -------------------------------------------------------------
     def _row_to_requirement(self, row: sqlite3.Row) -> Requirement:
+        row_keys = row.keys()
+        adv_scenarios = (
+            [AdversarialScenario.model_validate(s) for s in json.loads(row["adversarial_scenarios"])]
+            if "adversarial_scenarios" in row_keys and row["adversarial_scenarios"]
+            else []
+        )
         return Requirement(
             id=row["id"],
             title=row["title"],
@@ -281,26 +312,35 @@ class StorageRepository:
             status=VerificationStatus(row["status"]),
             acceptance_criteria=json.loads(row["acceptance_criteria"]),
             linked_tests=json.loads(row["linked_tests"]),
+            adversarial_scenarios=adv_scenarios,
             latest_run_id=row["latest_run_id"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
 
     def _row_to_verification_run(self, row: sqlite3.Row) -> VerificationRun:
+        row_keys = row.keys()
         test_names = json.loads(row["test_names"]) if row["test_names"] else []
         finding_ids = json.loads(row["finding_ids"]) if row["finding_ids"] else []
+        failure_cls_str = row["failure_classification"] if "failure_classification" in row_keys and row["failure_classification"] else "NONE"
+        try:
+            failure_cls = FailureClassification(failure_cls_str)
+        except ValueError:
+            failure_cls = FailureClassification.NONE
+
         return VerificationRun(
             run_id=row["run_id"],
             requirement_id=row["requirement_id"],
             timestamp=row["timestamp"],
             command=row["command"],
             execution_status=ExecutionStatus(row["execution_status"]),
+            failure_classification=failure_cls,
             exit_code=row["exit_code"],
             duration_ms=row["duration_ms"],
-            start_time=row["start_time"] if "start_time" in row.keys() and row["start_time"] else row["timestamp"],
-            end_time=row["end_time"] if "end_time" in row.keys() and row["end_time"] else row["timestamp"],
+            start_time=row["start_time"] if "start_time" in row_keys and row["start_time"] else row["timestamp"],
+            end_time=row["end_time"] if "end_time" in row_keys and row["end_time"] else row["timestamp"],
             test_names=test_names,
-            concise_output=row["concise_output"] if "concise_output" in row.keys() and row["concise_output"] else "",
+            concise_output=row["concise_output"] if "concise_output" in row_keys and row["concise_output"] else "",
             finding_ids=finding_ids,
             summary=RunSummary.model_validate_json(row["summary"]),
             code_fingerprint=row["code_fingerprint"],
@@ -325,12 +365,24 @@ class StorageRepository:
         )
 
     def _row_to_finding(self, row: sqlite3.Row) -> Finding:
+        row_keys = row.keys()
+        failure_cls_str = row["failure_classification"] if "failure_classification" in row_keys and row["failure_classification"] else "NONE"
+        try:
+            failure_cls = FailureClassification(failure_cls_str)
+        except ValueError:
+            failure_cls = FailureClassification.NONE
+
         return Finding(
             finding_id=row["finding_id"],
             requirement_id=row["requirement_id"],
+            run_id=row["run_id"] if "run_id" in row_keys and row["run_id"] else "",
+            test_name=row["test_name"] if "test_name" in row_keys and row["test_name"] else "",
             severity=FindingSeverity(row["severity"]),
+            failure_classification=failure_cls,
             explanation=row["explanation"],
             reproduction_instructions=row["reproduction_instructions"],
+            code_fingerprint=row["code_fingerprint"] if "code_fingerprint" in row_keys and row["code_fingerprint"] else "",
+            test_fingerprint=row["test_fingerprint"] if "test_fingerprint" in row_keys and row["test_fingerprint"] else "",
             linked_evidence_ids=json.loads(row["linked_evidence_ids"]),
             created_at=row["created_at"],
         )
