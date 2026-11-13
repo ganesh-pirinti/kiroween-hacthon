@@ -75,8 +75,19 @@ legacy_verifier = Verifier(evidence_store=legacy_evidence_store)
 
 
 # -----------------------------------------------------------------
-# API v1 Canonical Endpoints
+# System & API v1 Canonical Endpoints
 # -----------------------------------------------------------------
+@app.get("/health", tags=["System"])
+def health_root() -> Dict[str, Any]:
+    """Root operational health endpoint."""
+    return {
+        "status": "healthy",
+        "service": "Ghost Protocol Verification Engine",
+        "slogan": "AI says Done. We demand proof.",
+        "version": "1.0.0",
+    }
+
+
 @app.get("/api/v1/health", tags=["V1 System"])
 def health_v1() -> Dict[str, Any]:
     """Operational health and catalog statistics."""
