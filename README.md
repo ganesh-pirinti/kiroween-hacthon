@@ -148,6 +148,8 @@ Open browser to: [http://localhost:5173](http://localhost:5173)
 
 ## 5. Three-Minute Live Judging Demonstration Script
 
+> **Full Detailed Script**: See [docs/DEMO_SCRIPT.md](file:///c:/Users/Abhi/Desktop/kiro%20hackthon/docs/DEMO_SCRIPT.md) for speaking points and minute-by-minute cues.
+
 This script walks judges through the primary scenario (`PAYMENT-004`) in exactly 3 minutes.
 
 ### Act 1: The AI Agent's False Claim (0:00 – 0:45)
@@ -236,6 +238,8 @@ To scientifically quantify why ordinary happy-path tests fail, we constructed an
 5. **Output Safety & Timeouts**: Process stdout/stderr is capped at 64KB UTF-8 bytes to prevent buffer bloat; runs are terminated after 30 seconds.
 
 ### Honest Limitations & Disclosures
+> **Full Engineering Assessment**: See [docs/KNOWN_LIMITATIONS.md](file:///c:/Users/Abhi/Desktop/kiro%20hackthon/docs/KNOWN_LIMITATIONS.md) for detailed boundaries.
+
 - **Not a Formal Audit**: Passing automated tests verifies specific threat vectors; it does not constitute a certified SOC2 or formal third-party security audit.
 - **Local Host Boundary**: Ghost Protocol runs locally and relies on operating system process boundaries. It does not run inside isolated hardware microVMs (e.g. Firecracker).
 - **Deterministic Randomness**: Property-based invariant tests use bounded iterations with deterministic seeds (`seed=42`, `seed=1337`) for test reproducibility.
