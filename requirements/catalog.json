@@ -1,0 +1,130 @@
+{
+  "version": "1.0.0",
+  "project": "Ghost Protocol",
+  "requirements": [
+    {
+      "id": "PAYMENT-001",
+      "title": "Account Initialization and Non-Negative Balance Enforcement",
+      "description": "An account must be created with non-negative initial balance; negative balances raise InvalidAmountError.",
+      "status": "UNVERIFIED",
+      "acceptance_criteria": [
+        {
+          "id": "AC-01.1",
+          "description": "Initial balance >= 0 succeeds and sets balance accurately."
+        },
+        {
+          "id": "AC-01.2",
+          "description": "Initial balance < 0 raises InvalidAmountError and prevents account creation."
+        }
+      ],
+      "linked_tests": [
+        "backend/tests/test_payment.py::TestPaymentBasics::test_account_initialization_non_negative"
+      ]
+    },
+    {
+      "id": "PAYMENT-002",
+      "title": "Positive Transfer Amount Validation",
+      "description": "Transfer amounts <= 0 must be rejected with InvalidAmountError without mutating balances.",
+      "status": "UNVERIFIED",
+      "acceptance_criteria": [
+        {
+          "id": "AC-02.1",
+          "description": "Transfer amount of 0 raises InvalidAmountError."
+        },
+        {
+          "id": "AC-02.2",
+          "description": "Negative transfer amounts raise InvalidAmountError."
+        },
+        {
+          "id": "AC-02.3",
+          "description": "Both account balances remain unchanged."
+        }
+      ],
+      "linked_tests": [
+        "backend/tests/test_payment.py::TestPaymentBasics::test_negative_or_zero_amount_rejected"
+      ]
+    },
+    {
+      "id": "PAYMENT-003",
+      "title": "Successful Balance Transfer",
+      "description": "When transfer amount <= sender balance, sender is debited, recipient is credited, and total funds are conserved.",
+      "status": "UNVERIFIED",
+      "acceptance_criteria": [
+        {
+          "id": "AC-03.1",
+          "description": "Sender debited by amount, recipient credited by exact amount."
+        },
+        {
+          "id": "AC-03.2",
+          "description": "Conservation of total balances across accounts."
+        },
+        {
+          "id": "AC-03.3",
+          "description": "TransferResult status is SUCCESS."
+        }
+      ],
+      "linked_tests": [
+        "backend/tests/test_payment.py::TestPaymentTransfers::test_valid_transfer_updates_balances"
+      ]
+    },
+    {
+      "id": "PAYMENT-004",
+      "title": "Overdraft Prevention and Atomic Balance Preservation",
+      "description": "When a transfer amount exceeds sender available balance, transfer must be rejected and neither balance may change.",
+      "status": "UNVERIFIED",
+      "acceptance_criteria": [
+        {
+          "id": "AC-04.1",
+          "description": "Transfer attempt exceeding available balance raises InsufficientFundsError."
+        },
+        {
+          "id": "AC-04.2",
+          "description": "Sender balance strictly remains at initial level (₹10,000 in baseline)."
+        },
+        {
+          "id": "AC-04.3",
+          "description": "Recipient balance strictly remains at initial level (₹0 in baseline)."
+        },
+        {
+          "id": "AC-04.4",
+          "description": "Operation is atomic; zero partial mutation allowed."
+        }
+      ],
+      "linked_tests": [
+        "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged"
+      ]
+    },
+    {
+      "id": "PAYMENT-005",
+      "title": "Prohibition of Self-Transfers",
+      "description": "An account cannot initiate a transfer to itself; raises SelfTransferError.",
+      "status": "UNVERIFIED",
+      "acceptance_criteria": [
+        {
+          "id": "AC-05.1",
+          "description": "sender_id == recipient_id raises SelfTransferError."
+        },
+        {
+          "id": "AC-05.2",
+          "description": "Account balance remains unchanged."
+        }
+      ],
+      "linked_tests": [
+        "backend/tests/test_payment.py::TestPaymentTransfers::test_self_transfer_rejected"
+      ]
+    },
+    {
+      "id": "PAYMENT-006",
+      "title": "Dual-Authorization for High-Value Corporate Transfers",
+      "description": "Transfers exceeding ₹1,000,000 require secondary managerial authorization.",
+      "status": "UNVERIFIED",
+      "acceptance_criteria": [
+        {
+          "id": "AC-06.1",
+          "description": "Transfers > ₹1,000,000 enter PENDING_APPROVAL status."
+        }
+      ],
+      "linked_tests": []
+    }
+  ]
+}

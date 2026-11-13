@@ -1,0 +1,55 @@
+{
+  "evidence_id": "ev-suite-d7e00e0cd2",
+  "requirement_id": "SUITE-ALL",
+  "verdict": "PASS",
+  "command": "C:\\Users\\Abhi\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m pytest backend/tests/test_payment.py -v --tb=short",
+  "exit_code": 0,
+  "stdout": "============================= test session starts =============================\nplatform win32 -- Python 3.11.9, pytest-9.2.0, pluggy-1.7.0 -- C:\\Users\\Abhi\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\Users\\Abhi\\Desktop\\kiro hackthon\nconfigfile: pytest.ini\nplugins: anyio-4.15.1\ncollecting ... collected 6 items\n\nbackend/tests/test_payment.py::TestPaymentBasics::test_account_initialization_non_negative PASSED [ 16%]\nbackend/tests/test_payment.py::TestPaymentBasics::test_negative_or_zero_amount_rejected PASSED [ 33%]\nbackend/tests/test_payment.py::TestPaymentTransfers::test_valid_transfer_updates_balances PASSED [ 50%]\nbackend/tests/test_payment.py::TestPaymentTransfers::test_self_transfer_rejected PASSED [ 66%]\nbackend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged PASSED [ 83%]\nbackend/tests/test_payment.py::TestPaymentAdversarial::test_boundary_overdraft_rejected PASSED [100%]\n\n============================== 6 passed in 0.13s ==============================\n",
+  "stderr": "",
+  "duration_ms": 2858.08,
+  "timestamp_utc": "2026-11-13T19:18:39.977548+00:00",
+  "test_results": [
+    {
+      "test_name": "backend/tests/test_payment.py::TestPaymentBasics::test_account_initialization_non_negative",
+      "status": "passed",
+      "duration_seconds": 0.0,
+      "message": null
+    },
+    {
+      "test_name": "backend/tests/test_payment.py::TestPaymentBasics::test_negative_or_zero_amount_rejected",
+      "status": "passed",
+      "duration_seconds": 0.0,
+      "message": null
+    },
+    {
+      "test_name": "backend/tests/test_payment.py::TestPaymentTransfers::test_valid_transfer_updates_balances",
+      "status": "passed",
+      "duration_seconds": 0.0,
+      "message": null
+    },
+    {
+      "test_name": "backend/tests/test_payment.py::TestPaymentTransfers::test_self_transfer_rejected",
+      "status": "passed",
+      "duration_seconds": 0.0,
+      "message": null
+    },
+    {
+      "test_name": "backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged",
+      "status": "passed",
+      "duration_seconds": 0.0,
+      "message": null
+    },
+    {
+      "test_name": "backend/tests/test_payment.py::TestPaymentAdversarial::test_boundary_overdraft_rejected",
+      "status": "passed",
+      "duration_seconds": 0.0,
+      "message": null
+    }
+  ],
+  "code_fingerprint": "a1bfe7884b6318d3a67c2d11beaa70583fe60bc70ddfbb31a946a137d325fa2f",
+  "test_fingerprint": "aa66d2ecc020acd67156721db79bde5ead1568381c66de4865c0ae0d0426bf73",
+  "evidence_hash": "b4c6b89e5742484f272529aea3444c85920052a35577c47b494387cded9260aa",
+  "metadata": {
+    "scope": "full_test_suite"
+  }
+}
