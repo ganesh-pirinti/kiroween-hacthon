@@ -1,6 +1,6 @@
 # GHOST PROTOCOL — Three-Minute Live Judging Demo Script
 
-> **Product Slogan**: *"AI says Done. We demand proof."*  
+> **Product Tagline**: *"AI says Done. We demand proof."*  
 > **Presenter**: Lead Systems Architect  
 > **Target Scenario**: `PAYMENT-004` (Overdraft Protection & Atomic Balance Preservation)  
 > **Total Duration**: Exactly 3 Minutes (180 Seconds)  
@@ -9,8 +9,8 @@
 
 ## Technical Setup Before Judges Arrive
 
-Ensure the following two terminals are running:
-1. **Terminal 1 (Backend API)**:
+Ensure the following two terminals are active on the Windows workstation:
+1. **Terminal 1 (Backend API Server)**:
    ```powershell
    python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
    ```
@@ -19,109 +19,120 @@ Ensure the following two terminals are running:
    cd frontend
    npm run dev
    ```
-3. Open browser to **[http://localhost:5173](http://localhost:5173)** in full screen.
+3. Open browser to **[http://localhost:5173](http://localhost:5173)**.
 
 ---
 
-## 3-Minute Demonstration Flow
+## Structured 8-Step Demonstration Flow
 
 ```mermaid
-timeline
-    title 3-Minute Live Judging Timeline
-    00:00 - 00:45 : Act 1: The False Completion Claim : "Would you trust an AI coding agent with your money?" Show agent's completion claim (ordinary test passed).
-    00:45 - 01:30 : Act 2: Exposing the Flaw : Click "Run Demonstration". Subprocess exit code 1. Status: VIOLATION. Balance drops to -₹5,000. Finding generated.
-    01:30 - 02:15 : Act 3: Verifying the Fix : Click "Verify Requirement" on PAYMENT-004. Subprocess exit code 0. Status: VERIFIED. Cryptographic SHA-256 seal.
-    02:15 - 03:00 : Act 4: Criteria Coverage & Benchmark : Show PAYMENT-003 stays UNVERIFIED due to criteria gap. Show 6-defect benchmark: 100% detection vs 0% baseline.
+flowchart TD
+    S1["1. Introduce Problem\n(AI Agent Claim)"] --> S2["2. Show Requirement\n(PAYMENT-004 in UI)"]
+    S2 --> S3["3. Run Vulnerable Fixture\n(Click 'Run Demonstration')"]
+    S3 --> S4["4. Show Failing Test\n(Exit Code 1, VIOLATION)"]
+    S4 --> S5["5. Run Corrected Code\n(Click 'Verify Requirement')"]
+    S5 --> S6["6. Show Passing Test\n(Exit Code 0, Balances Safe)"]
+    S6 --> S7["7. Show Evidence Record\n(SHA-256 Digest in Viewer)"]
+    S7 --> S8["8. Explain Limitations\n(Process Sandbox & Criteria Gaps)"]
 ```
 
 ---
 
-### Act 1: The AI Agent's False Completion Claim (0:00 – 0:45)
-
-**Presenter Talking Points**:
-> *"Good morning judges. Every engineering team using autonomous AI coding agents faces the same terrifying trap: the agent writes code, runs a trivial test it wrote for itself, reports 'All tests passed, task complete!', and moves on. But would you trust that claim with your money?"*
-
-**Presenter Action**:
-- Show the AI Agent Completion Claim from `evidence/agent_completion_claim.json`:
-  > *"Agent Claim: Implemented payment transfer. Ran test `test_valid_transfer_updates_balances`. 1 passed in 0.02s. Requirement PAYMENT-004 is Done!"*
-
-**The Catch**:
-> *"The AI agent tested transferring ₹200 from an account with ₹10,000 balance. It passed. But the agent completely ignored the core specification of PAYMENT-004: what happens when someone attempts to transfer ₹15,000 from a ₹10,000 balance? Ghost Protocol does not trust AI prose. We demand proof."*
+### Step 1: Introduce the Problem (0:00 – 0:25)
+- **Presenter says**:
+  > *"Judges, autonomous AI coding agents are writing massive amounts of code. But every engineering team faces the same critical flaw: completion hallucination. The agent writes code, runs a trivial unit test it wrote for itself, reports 'All tests passed, task complete!', and moves on. But would you trust that claim with your money?"*
+- **Action**: Direct attention to the AI agent's false completion claim (`evidence/agent_completion_claim.json`):
+  > *"Agent Claim: Implemented money transfer in `backend/app/payment.py`. Test `test_valid_transfer_updates_balances` passed in 0.02s. Requirement PAYMENT-004 is Done!"*
+- **The Core Flaw**: The agent only tested transferring ₹200 from an account with ₹10,000 balance. It never tested transferring ₹15,000!
 
 ---
 
-### Act 2: Exposing the Vulnerable Code (0:45 – 1:30)
-
-**Presenter Talking Points**:
-> *"Now let's run Ghost Protocol's adversarial verification engine against the agent's code."*
-
-**Presenter Action**:
-- In the dashboard, click the top **"Run Demonstration"** button (or execute `python scripts/demonstrate_bug.py` in PowerShell).
-
-**Observable Outcome**:
-1. Ghost Protocol executes the adversarial overdraft test against the vulnerable test fixture.
-2. **Process Exit Code**: `1`
-3. **Requirement Status**: Transitions to crimson **`VIOLATION`**.
-4. **Failure Output**: `Failed: DID NOT RAISE InsufficientFundsError`.
-5. **Observed Ledger State**: The sender balance dropped to **-₹5,000** and recipient received **₹15,000**! Money was created out of thin air.
-6. **Finding Generated**: Actionable `[CRITICAL]` finding `fnd-6f2f3eb6` created with exact reproduction commands:
-   ```powershell
-   python -m pytest backend/tests/test_adversarial_vulnerable.py -v
-   ```
+### Step 2: Show a Requirement in GHOST PROTOCOL (0:25 – 0:45)
+- **Presenter says**:
+  > *"Ghost Protocol rejects natural-language claims. We demand executable proof against unambiguous formal specifications."*
+- **Action**: In the dashboard, click on **`PAYMENT-004`** in the Requirements Explorer.
+- **Show on Screen**:
+  - **Specification**: *"When a transfer amount exceeds the sender's available balance, the transfer must be rejected and neither account balance may change."*
+  - **Acceptance Criteria**: Point out `AC-04.1` (raises `InsufficientFundsError`), `AC-04.2` (sender balance remains ₹10,000), `AC-04.3` (recipient balance remains ₹0), and `AC-04.4` (atomic immutability).
+  - **Bound Test Target**: `backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged`.
 
 ---
 
-### Act 3: Applying the Fix & Verifying Proof (1:30 – 2:15)
-
-**Presenter Talking Points**:
-> *"Now we apply the corrected implementation with atomic balance preservation and re-verify."*
-
-**Presenter Action**:
-- In the Requirements Explorer, select **`PAYMENT-004`** and click **"Verify Requirement"**.
-
-**Observable Outcome**:
-1. Ghost Protocol runs `test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged`.
-2. **Process Exit Code**: `0`
-3. **Requirement Status**: Transitions to emerald **`VERIFIED`**.
-4. **Terminal Log in Evidence Viewer**: `============================== 1 passed in 0.05s ==============================`.
-5. **Ledger Immutability**:
-   - Sender balance strictly maintained at **₹10,000**.
-   - Recipient balance strictly maintained at **₹0**.
-6. **Integrity Seal**: SHA-256 digest is cryptographically computed and sealed in SQLite.
+### Step 3: Run the Deliberately Vulnerable Payment Implementation (0:45 – 1:05)
+- **Presenter says**:
+  > *"Let's test what actually happens if we run the agent's code against an adversarial overdraft check."*
+- **Action**: Click the top **"Run Demonstration"** button in the dashboard (or run `python scripts/demonstrate_bug.py` in PowerShell).
 
 ---
 
-### Act 4: Criteria Coverage & Scientific Benchmark (2:15 – 3:00)
-
-**Presenter Talking Points**:
-> *"Ghost Protocol enforces two foundational axioms that no other tool provides: no false convergence, and scientific defect detection."*
-
-**Presenter Action 1 (No False Convergence)**:
-- Click on **`PAYMENT-003`** in the Requirements Explorer.
-- Point to acceptance criterion `AC-03.4` (Audit compliance log stream).
-- Show that because `AC-03.4` has no executable test bound (`linked_test: null`), `PAYMENT-003` remains strictly **`UNVERIFIED`** even though all its other tests passed.
-- *"Unverified criteria can never be marked verified. AI claims cannot skip criteria."*
-
-**Presenter Action 2 (The 6-Defect Benchmark)**:
-- Click **"Benchmark Report"** in the top navigation bar.
-- Point to the confusion matrix:
-  - **Baseline Suite (Ordinary Happy-Path Tests)**: **0.0% defect detection (100% false negative rate)**. Missed all 6 seeded defects.
-  - **Ghost Protocol (Adversarial Engine)**: **100.0% defect detection (6/6 defects caught)** with **0% false alarms** on clean reference code.
-
-**Closing Line**:
-> *"When AI says Done, don't trust an LLM summary. Demand Ghost Protocol proof. Thank you."*
+### Step 4: Show the Actual Failing Adversarial Test (1:05 – 1:30)
+- **Presenter says**:
+  > *"The agent said Done. Here is reality."*
+- **Show on Screen**:
+  - The vulnerable fixture execution fails immediately with **Exit Code `1`**.
+  - **Status**: Transitions to crimson **`VIOLATION`**.
+  - **Actual Failure Trace**: `FAILED test_adversarial_vulnerable.py - Failed: DID NOT RAISE InsufficientFundsError`.
+  - **Ledger Corruption**: The sender's balance dropped to **-₹5,000** and the recipient balance was credited with **₹15,000**.
+  - **Actionable Finding Generated**: `[CRITICAL]` finding `fnd-6f2f3eb6` created with reproduction commands:
+    ```powershell
+    python -m pytest backend/tests/test_adversarial_vulnerable.py -v
+    ```
 
 ---
 
-## CLI Fallback Commands (If Projector / Internet Fails)
+### Step 5: Run the Corrected Implementation (1:30 – 1:50)
+- **Presenter says**:
+  > *"Now we apply the corrected implementation with atomic balance preservation and re-verify."*
+- **Action**: In the Requirements Explorer, click **"Verify Requirement"** on `PAYMENT-004`.
 
-If the web UI cannot be shown, run these two standalone PowerShell commands directly in front of judges:
+---
 
+### Step 6: Show the Actual Passing Test (1:50 – 2:15)
+- **Presenter says**:
+  > *"Notice what Ghost Protocol confirms: not just an exit code, but state immutability."*
+- **Show on Screen**:
+  - **Process Exit Code**: `0` (COMPLETED).
+  - **Status**: Transitions to emerald **`VERIFIED`**.
+  - **Terminal Output**: `============================== 1 passed in 0.05s ==============================`.
+  - **Balance Proof**:
+    - Sender balance strictly maintained at **₹10,000**.
+    - Recipient balance strictly maintained at **₹0**.
+    - Zero phantom mutation.
+
+---
+
+### Step 7: Show the Evidence Record and Verification Verdict (2:15 – 2:40)
+- **Presenter says**:
+  > *"Every verdict in Ghost Protocol is anchored by immutable cryptographic proof."*
+- **Show on Screen**:
+  - Direct attention to the **Evidence Viewer** panel:
+    - **Evidence ID**: `ev-a42e2660ec` (`PROCESS_LOG`).
+    - **SHA-256 Digest**: `52ed69601b9c2098d69f9be5f74dff877c4f41b6cf213a0cc031ae89a14ba24b`.
+    - **Code Fingerprint**: Runtime SHA-256 hash of `payment.py` ensuring the code executed is the code in repository.
+    - **Tamper Verification**: On-demand integrity endpoint verifies payload against database digest.
+
+---
+
+### Step 8: Explain Remaining Limitations (2:40 – 3:00)
+- **Presenter says**:
+  > *"To maintain honest engineering, we openly state what Ghost Protocol does and does not do."*
+- **Show / Explain**:
+  1. **No False Convergence**: Click `PAYMENT-003`—show that because criterion `AC-03.4` has no test, it stays strictly `UNVERIFIED`.
+  2. **Process Sandboxing**: Current execution uses isolated OS subprocesses (`shell=False`, 30s timeout, 64KB limits) rather than hardware microVMs.
+  3. **Benchmark Proof**: Click **"Benchmark Report"**—show that ordinary tests caught 0/6 defects, while Ghost Protocol caught 6/6 with 0 false alarms.
+- **Closing Line**:
+  > *"AI says Done. We demand proof. Thank you."*
+
+---
+
+## Standalone CLI Fallback (No Web / Internet Needed)
+
+If presenting in an environment without browser or projector access:
 ```powershell
-# 1. Five-second automated overdraft demonstration (Vulnerable vs Corrected)
+# Execute the complete 5-second comparative demonstration
 python scripts/demonstrate_bug.py
 
-# 2. Independent 6-defect benchmark harness
+# Execute the independent 6-defect benchmark harness
 python scripts/run_benchmark.py
 ```
-Both print full forensic execution scorecards to standard output with zero web dependencies.
+Both commands print full execution scorecards directly to PowerShell with zero dependencies.

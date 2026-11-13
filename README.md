@@ -265,3 +265,45 @@ To scientifically quantify why ordinary happy-path tests fail, we constructed an
 - [x] **Audit Evidence**: Evidence records stored in `evidence/evidence.db` and sealed with SHA-256 digests.
 - [x] **Backup Demo Data**: Pre-generated JSON evidence files in `evidence/` for offline demonstration.
 - [x] **Truth Axioms Enforced**: Requirements with unverified acceptance criteria (`PAYMENT-003`, `PAYMENT-006`) remain strictly `UNVERIFIED`.
+
+---
+
+## 10. Troubleshooting & Common Questions
+
+### 1. Port 8000 is already occupied
+If another process is using port 8000 on Windows:
+```powershell
+# Identify process using port 8000
+netstat -ano | findstr :8000
+
+# Start backend on an alternate port (e.g. 8080)
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8080
+```
+*Note: If changing backend port, update `VITE_API_URL` in `frontend/.env` to match.*
+
+### 2. Port 5173 is already occupied
+Vite automatically prompts to select the next available port (e.g., 5174), or specify explicitly:
+```powershell
+npm --prefix frontend run dev -- --port 5174
+```
+
+### 3. Resetting the Local Audit Ledger
+If you wish to clear all previous execution runs and reset to a clean slate:
+```powershell
+# Stop the backend server, then delete evidence.db:
+Remove-Item -Path "evidence/evidence.db" -Force
+
+# On restart, the backend automatically re-initializes tables and syncs catalog.json
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+### 4. Running Without Browser or Internet Access
+If presenting in an environment without internet access or web browser availability:
+```powershell
+# Run the complete self-contained demonstration directly in PowerShell:
+python scripts/demonstrate_bug.py
+
+# Run the 6-defect benchmark harness:
+python scripts/run_benchmark.py
+```
+Both commands output full forensic scorecards directly to stdout.
