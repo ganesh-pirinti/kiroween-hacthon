@@ -34,11 +34,16 @@ export interface RunSummary {
 export interface VerificationRun {
   run_id: string;
   requirement_id: string;
-  timestamp: string;
   command: string;
   execution_status: ExecutionStatus;
   exit_code: number;
   duration_ms: number;
+  start_time: string;
+  end_time: string;
+  timestamp: string;
+  test_names: string[];
+  concise_output: string;
+  finding_ids: string[];
   summary: RunSummary;
   code_fingerprint: string;
   test_fingerprint: string;
@@ -67,5 +72,40 @@ export interface Evidence {
     sha256: string;
     exit_code: number;
     extra: Record<string, any>;
+  };
+}
+
+export interface SystemHealth {
+  status: string;
+  service: string;
+  slogan: string;
+  version: string;
+  active_requirements: number;
+  total_verification_runs: number;
+  total_findings: number;
+}
+
+export interface DemonstrationResult {
+  requirement_id: string;
+  scenario: {
+    initial_sender_balance: number;
+    attempted_transfer: number;
+    expected_outcome: string;
+  };
+  vulnerable_run: {
+    run_id: string;
+    exit_code: number;
+    status: string;
+    concise_output: string;
+    finding?: Finding;
+    evidence_id?: string;
+  };
+  corrected_run: {
+    run_id: string;
+    exit_code: number;
+    status: string;
+    concise_output: string;
+    finding?: Finding;
+    evidence_id?: string;
   };
 }
