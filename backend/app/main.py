@@ -7,12 +7,24 @@ and tamper-evident evidence queries.
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from typing import Any, Dict, List, Optional
+
+# Ensure project root is always importable regardless of current working directory
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from fastapi import FastAPI, HTTPException, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.app.engine.evaluator import VerificationEvaluator
+from backend.app.engine.intelligence import (
+    ChangeImpactAnalyzer,
+    RiskAnalyzer,
+    AuditReportGenerator,
+)
 from backend.benchmarks.harness import BenchmarkHarness, BenchmarkReport
 from backend.app.security import (
     ALLOWED_ORIGINS,
@@ -64,6 +76,11 @@ evaluator = VerificationEvaluator(repository)
 benchmark_harness = BenchmarkHarness()
 latest_benchmark_report: Optional[BenchmarkReport] = None
 
+# Intelligence, Risk & Audit Engines
+impact_analyzer = ChangeImpactAnalyzer(repository)
+risk_analyzer = RiskAnalyzer(repository, impact_analyzer)
+audit_generator = AuditReportGenerator(repository, impact_analyzer, risk_analyzer)
+
 # Initialize catalog on startup
 catalog_path = Path("requirements/catalog.json")
 if catalog_path.exists():
@@ -77,6 +94,21 @@ legacy_verifier = Verifier(evidence_store=legacy_evidence_store)
 # -----------------------------------------------------------------
 # System & API v1 Canonical Endpoints
 # -----------------------------------------------------------------
+@app.get("/", tags=["System"])
+def root() -> Dict[str, Any]:
+    """Root endpoint welcoming clients and confirming operational health."""
+    return {
+        "status": "healthy",
+        "service": "Ghost Protocol Verification Engine",
+        "slogan": "AI says Done. We demand proof.",
+        "version": "1.0.0",
+        "docs_url": "/docs",
+        "health_url": "/health",
+        "api_v1_health": "/api/v1/health",
+        "requirements_url": "/api/v1/requirements",
+    }
+
+
 @app.get("/health", tags=["System"])
 def health_root() -> Dict[str, Any]:
     """Root operational health endpoint."""
@@ -91,17 +123,14 @@ def health_root() -> Dict[str, Any]:
 @app.get("/api/v1/health", tags=["V1 System"])
 def health_v1() -> Dict[str, Any]:
     """Operational health and catalog statistics."""
-    reqs = repository.list_requirements()
-    runs = repository.list_verification_runs(limit=500)
-    findings = repository.list_findings(limit=500)
     return {
         "status": "healthy",
         "service": "Ghost Protocol Verification Engine",
         "slogan": "AI says Done. We demand proof.",
         "version": "1.0.0-foundation",
-        "active_requirements": len(reqs),
-        "total_verification_runs": len(runs),
-        "total_findings": len(findings),
+        "active_requirements": repository.count_requirements(),
+        "total_verification_runs": repository.count_verification_runs(),
+        "total_findings": repository.count_findings(),
     }
 
 
@@ -191,6 +220,13 @@ def get_run_v1(run_id: str) -> VerificationRun:
             detail=f"Verification run '{clean_run_id}' not found.",
         )
     return run
+
+
+@app.get("/api/v1/runs/{run_id}/evidence", response_model=List[Evidence], tags=["V1 Runs"])
+def get_run_evidence_v1(run_id: str) -> List[Evidence]:
+    """Retrieve all evidence artifacts associated with a verification run."""
+    clean_run_id = validate_run_id(run_id)
+    return repository.list_evidence_for_run(clean_run_id)
 
 
 @app.post("/api/v1/demonstrate/vulnerable-vs-corrected", tags=["V1 Demonstration"])
@@ -349,6 +385,95 @@ def get_latest_benchmark_report() -> BenchmarkReport:
 
 
 # -----------------------------------------------------------------
+# Intelligence, Risk, Change Impact & Audit Endpoints
+# -----------------------------------------------------------------
+@app.get("/api/v1/impact/analysis", tags=["V1 Intelligence"])
+def get_change_impact_analysis() -> Dict[str, Any]:
+    """Inspects code/test SHA-256 fingerprints to detect stale evidence and recommend reruns."""
+    return impact_analyzer.analyze_impact()
+
+
+@app.get("/api/v1/risk/analysis", tags=["V1 Intelligence"])
+def get_risk_analysis() -> Dict[str, Any]:
+    """Computes explainable verification risk scores and prioritized remediation recommendations."""
+    return risk_analyzer.compute_risk_profile()
+
+
+@app.get("/api/v1/audit/report", tags=["V1 Intelligence"])
+def get_audit_report(
+    format: str = Query("markdown", pattern="^(markdown|json)$", description="Report format (markdown or json)")
+) -> Dict[str, Any]:
+    """Generates an exportable audit report from live SQLite ledger data."""
+    return audit_generator.generate_report(report_format=format)
+
+
+@app.get("/api/v1/ai-copilot/status", tags=["V1 Copilot"])
+def get_copilot_status() -> Dict[str, Any]:
+    """Returns honest status of AI-assisted verification proposals."""
+    import os
+    has_key = bool(os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    return {
+        "status": "active" if has_key else "offline_deterministic",
+        "mode": "PROPOSAL_ONLY (NOT PROOF)",
+        "message": (
+            "Ghost Protocol's core verification engine is 100% deterministic and requires zero external AI APIs. "
+            "AI test proposals carry zero evidential weight until executed and proven in the isolated subprocess runner."
+        ),
+        "external_api_configured": has_key,
+    }
+
+
+@app.get("/api/v1/ai-copilot/proposals/{requirement_id}", tags=["V1 Copilot"])
+def get_copilot_proposals(requirement_id: str) -> Dict[str, Any]:
+    """Generates candidate test proposals for coverage gaps and edge cases (clearly marked as proposals, not proof)."""
+    clean_id = validate_requirement_id(requirement_id)
+    req = repository.get_requirement(clean_id)
+    if not req:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Requirement '{clean_id}' not found.",
+        )
+
+    # Deterministic rule-based proposal templates
+    proposals = []
+    coverage = req.get_coverage()
+
+    for ac in req.acceptance_criteria:
+        if not ac.linked_test or not ac.linked_test.strip():
+            proposals.append({
+                "proposal_id": f"prop-{ac.id.lower()}",
+                "criterion_id": ac.id,
+                "type": "COVERAGE_GAP_FILL",
+                "title": f"Candidate Test for {ac.id}",
+                "description": f"Proposed verification check for: {ac.description}",
+                "suggested_test_path": f"backend/tests/test_{clean_id.lower().replace('-', '_')}_extended.py::test_{ac.id.lower().replace('-', '_')}_compliance",
+                "status": "PROPOSAL_ONLY (NOT EXECUTED)",
+                "evidential_weight": "ZERO (Requires human review & execution)",
+            })
+
+    if clean_id == "PAYMENT-004":
+        proposals.append({
+            "proposal_id": "prop-pay4-concurrency",
+            "criterion_id": "AC-04.4",
+            "type": "ADVERSARIAL_CONCURRENCY",
+            "title": "Concurrent Overdraft Race Condition Test",
+            "description": "Simulate 5 concurrent ₹8,000 debit attempts from a single ₹10,000 balance to verify thread-safe balance preservation.",
+            "suggested_test_path": "backend/tests/test_payment.py::TestPaymentConcurrency::test_concurrent_race_overdraft",
+            "status": "PROPOSAL_ONLY (NOT EXECUTED)",
+            "evidential_weight": "ZERO (Requires human review & execution)",
+        })
+
+    return {
+        "requirement_id": clean_id,
+        "title": req.title,
+        "is_unverified": req.status == VerificationStatus.UNVERIFIED,
+        "total_proposals": len(proposals),
+        "proposals": proposals,
+        "integrity_notice": "AI suggestions are proposals, not proof. No requirement will be marked VERIFIED without passing executable checks.",
+    }
+
+
+# -----------------------------------------------------------------
 # Legacy Milestone 1 Endpoints (Preserved for compatibility)
 # -----------------------------------------------------------------
 class RequirementStatusResponse(BaseModel):
@@ -433,7 +558,10 @@ def get_requirement(requirement_id: str) -> Dict[str, Any]:
 
 
 @app.post("/api/verify/{requirement_id}", response_model=EvidenceRecord, tags=["Legacy Compatibility"])
-def verify_requirement_endpoint(requirement_id: str) -> EvidenceRecord:
+def verify_requirement_endpoint(
+    requirement_id: str,
+    _auth: None = Depends(enforce_local_access_control),
+) -> EvidenceRecord:
     req_id = requirement_id.upper()
     if req_id not in REQUIREMENTS_REGISTRY:
         raise HTTPException(
@@ -445,7 +573,9 @@ def verify_requirement_endpoint(requirement_id: str) -> EvidenceRecord:
 
 
 @app.post("/api/verify-all", response_model=VerifyAllResponse, tags=["Legacy Compatibility"])
-def verify_all_requirements_endpoint() -> VerifyAllResponse:
+def verify_all_requirements_endpoint(
+    _auth: None = Depends(enforce_local_access_control),
+) -> VerifyAllResponse:
     records: List[EvidenceRecord] = []
     counts = {
         LegacyVerificationStatus.PASS: 0,
@@ -488,3 +618,9 @@ def get_evidence_detail(evidence_id: str) -> EvidenceRecord:
             detail=f"Evidence record '{evidence_id}' not found.",
         )
     return record
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("backend.app.main:app", host="127.0.0.1", port=8000, reload=True)
+

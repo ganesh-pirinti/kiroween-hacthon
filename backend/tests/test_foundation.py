@@ -115,3 +115,86 @@ class TestSecurityBoundaries:
         limited = runner._limit_output(huge_text)
         assert "TRUNCATED: Output exceeded" in limited
         assert len(limited) < len(huge_text)
+
+
+# ---------------------------------------------------------------------------
+# Requirements consistency: REQUIREMENTS_REGISTRY must stay in sync with catalog.json
+# ---------------------------------------------------------------------------
+class TestRequirementsConsistency:
+    """Guards against REQUIREMENTS_REGISTRY (legacy verifier) drifting from catalog.json.
+
+    These tests document that both sources currently agree and will fail immediately
+    if someone adds a requirement to one without updating the other.  They are the
+    documented safeguard referenced in the PROJECT_HEALTH_REPORT.md under
+    'Requirements Consistency'.
+
+    Migration policy: catalog.json + SQLite is the authoritative V1 source.
+    REQUIREMENTS_REGISTRY is legacy-only.  New requirements MUST be added to
+    catalog.json first, then mirrored in REQUIREMENTS_REGISTRY if the legacy
+    API must serve them.  Removing this test before completing a full migration
+    of the legacy API to the V1 storage layer is not permitted.
+    """
+
+    def test_registry_ids_match_catalog(self) -> None:
+        """Every ID in REQUIREMENTS_REGISTRY must exist in catalog.json and vice-versa."""
+        import json
+        from backend.app.verifier import REQUIREMENTS_REGISTRY
+
+        catalog_path = Path("requirements/catalog.json")
+        assert catalog_path.exists(), "catalog.json is missing"
+        catalog_data = json.loads(catalog_path.read_text(encoding="utf-8"))
+        catalog_ids = {r["id"] for r in catalog_data["requirements"]}
+        registry_ids = set(REQUIREMENTS_REGISTRY.keys())
+
+        missing_from_catalog = registry_ids - catalog_ids
+        missing_from_registry = catalog_ids - registry_ids
+
+        assert not missing_from_catalog, (
+            f"IDs in REQUIREMENTS_REGISTRY but NOT in catalog.json: {missing_from_catalog}. "
+            "Add them to catalog.json or remove them from REQUIREMENTS_REGISTRY."
+        )
+        assert not missing_from_registry, (
+            f"IDs in catalog.json but NOT in REQUIREMENTS_REGISTRY: {missing_from_registry}. "
+            "Add them to REQUIREMENTS_REGISTRY or complete the legacy API migration."
+        )
+
+    def test_registry_test_targets_match_catalog(self) -> None:
+        """Test targets in REQUIREMENTS_REGISTRY must match linked_tests[0] in catalog.json."""
+        import json
+        from backend.app.verifier import REQUIREMENTS_REGISTRY
+
+        catalog_path = Path("requirements/catalog.json")
+        catalog_data = json.loads(catalog_path.read_text(encoding="utf-8"))
+        catalog_map = {r["id"]: r for r in catalog_data["requirements"]}
+
+        mismatches = []
+        for req_id, reg_def in REQUIREMENTS_REGISTRY.items():
+            cat_req = catalog_map.get(req_id)
+            if not cat_req:
+                continue  # covered by the ID check above
+            cat_primary_target = cat_req["linked_tests"][0] if cat_req["linked_tests"] else None
+            reg_target = reg_def.test_target
+
+            if cat_primary_target != reg_target:
+                mismatches.append(
+                    f"{req_id}: registry='{reg_target}' vs catalog='{cat_primary_target}'"
+                )
+
+        assert not mismatches, (
+            "Test target mismatches between REQUIREMENTS_REGISTRY and catalog.json:\n"
+            + "\n".join(mismatches)
+        )
+
+    def test_catalog_loads_correctly_into_sqlite(self, temp_repo: StorageRepository) -> None:
+        """catalog.json must load cleanly into SQLite with all IDs present."""
+        from backend.app.verifier import REQUIREMENTS_REGISTRY
+
+        catalog_path = Path("requirements/catalog.json")
+        reqs = temp_repo.sync_catalog(catalog_path)
+        loaded_ids = {r.id for r in reqs}
+
+        # Every registry ID must be loadable from catalog
+        for req_id in REQUIREMENTS_REGISTRY.keys():
+            assert req_id in loaded_ids, (
+                f"Requirement '{req_id}' is in REQUIREMENTS_REGISTRY but failed to load from catalog.json into SQLite."
+            )

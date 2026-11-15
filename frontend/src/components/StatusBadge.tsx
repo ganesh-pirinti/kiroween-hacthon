@@ -14,9 +14,9 @@ export const StatusBadge: React.FC<Props> = ({
   showIcon = true,
 }) => {
   const sizeClasses = {
-    sm: 'text-xs px-2 py-0.5 gap-1',
-    md: 'text-xs px-2.5 py-1 gap-1.5 font-medium',
-    lg: 'text-sm px-3.5 py-1.5 gap-2 font-semibold',
+    sm: 'text-[10px] px-2.5 py-0.5 gap-1 tracking-wider',
+    md: 'text-[11px] px-3 py-1 gap-1.5 font-semibold tracking-wider',
+    lg: 'text-xs px-3.5 py-1.5 gap-2 font-bold tracking-widest',
   }[size];
 
   const iconSizes = {
@@ -29,27 +29,27 @@ export const StatusBadge: React.FC<Props> = ({
     case 'VERIFIED':
       return (
         <span
-          className={`inline-flex items-center rounded-full border border-emerald-500/40 bg-emerald-950/40 text-emerald-400 ${sizeClasses}`}
+          className={`inline-flex items-center rounded-full border border-[var(--color-verified)]/40 bg-[var(--color-verified)]/12 text-emerald-400 text-[var(--color-verified)] shadow-[0_0_15px_rgba(var(--color-verified-rgb),0.25)] backdrop-blur-md font-mono-code font-bold ${sizeClasses}`}
         >
-          {showIcon && <CheckCircle2 className={`${iconSizes} text-emerald-400`} />}
+          {showIcon && <CheckCircle2 className={`${iconSizes} text-emerald-400 text-[var(--color-verified)]`} />}
           VERIFIED
         </span>
       );
     case 'VIOLATION':
       return (
         <span
-          className={`inline-flex items-center rounded-full border border-red-500/50 bg-red-950/50 text-red-400 animate-restrained-pulse ${sizeClasses}`}
+          className={`inline-flex items-center rounded-full border border-[var(--color-violation)]/60 bg-[var(--color-violation)]/15 text-red-400 text-[var(--color-violation)] shadow-[0_0_18px_rgba(var(--color-violation-rgb),0.35)] backdrop-blur-md font-mono-code font-bold animate-restrained-pulse ${sizeClasses}`}
         >
-          {showIcon && <AlertOctagon className={`${iconSizes} text-red-400`} />}
+          {showIcon && <AlertOctagon className={`${iconSizes} text-red-400 text-[var(--color-violation)]`} />}
           VIOLATION
         </span>
       );
     case 'BLOCKED':
       return (
         <span
-          className={`inline-flex items-center rounded-full border border-amber-500/40 bg-amber-950/40 text-amber-400 ${sizeClasses}`}
+          className={`inline-flex items-center rounded-full border border-[var(--color-warning)]/50 bg-[var(--color-warning)]/10 text-amber-400 text-[var(--color-warning)] shadow-[0_0_14px_rgba(var(--color-warning-rgb),0.25)] backdrop-blur-md font-mono-code font-bold ${sizeClasses}`}
         >
-          {showIcon && <AlertTriangle className={`${iconSizes} text-amber-400`} />}
+          {showIcon && <AlertTriangle className={`${iconSizes} text-amber-400 text-[var(--color-warning)]`} />}
           BLOCKED
         </span>
       );
@@ -57,9 +57,9 @@ export const StatusBadge: React.FC<Props> = ({
     default:
       return (
         <span
-          className={`inline-flex items-center rounded-full border border-slate-700 bg-slate-900/60 text-slate-400 ${sizeClasses}`}
+          className={`inline-flex items-center rounded-full border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.03)] text-slate-400 text-[var(--text-muted)] shadow-[0_0_10px_rgba(255,255,255,0.05)] backdrop-blur-md font-mono-code font-bold ${sizeClasses}`}
         >
-          {showIcon && <HelpCircle className={`${iconSizes} text-slate-400`} />}
+          {showIcon && <HelpCircle className={`${iconSizes} text-slate-400 text-[var(--text-muted)]`} />}
           UNVERIFIED
         </span>
       );

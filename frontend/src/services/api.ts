@@ -1,11 +1,15 @@
 import {
   AdversarialScenario,
+  AuditReportResponse,
   BenchmarkReport,
+  CopilotReport,
   CoverageReport,
   DemonstrationResult,
   Evidence,
   Finding,
+  ImpactAnalysisReport,
   Requirement,
+  RiskAnalysisReport,
   SystemHealth,
   VerificationRun,
   VerificationStatus,
@@ -64,8 +68,26 @@ export const api = {
   getRun: (runId: string): Promise<VerificationRun> =>
     fetchJson<VerificationRun>(`${API_BASE}/runs/${encodeURIComponent(runId)}`),
 
+  getRunEvidence: (runId: string): Promise<Evidence[]> =>
+    fetchJson<Evidence[]>(`${API_BASE}/runs/${encodeURIComponent(runId)}/evidence`),
+
   getEvidence: (evidenceId: string): Promise<Evidence> =>
     fetchJson<Evidence>(`${API_BASE}/evidence/${encodeURIComponent(evidenceId)}`),
+
+  verifyEvidenceIntegrity: (
+    evidenceId: string
+  ): Promise<{
+    evidence_id: string;
+    run_id: string;
+    requirement_id: string;
+    sha256_valid: boolean;
+    stored_digest: string;
+    computed_digest: string;
+    run_traced_in_database: boolean;
+    integrity_sealed: boolean;
+    verified_at: string;
+  }> =>
+    fetchJson(`${API_BASE}/evidence/${encodeURIComponent(evidenceId)}/verify`),
 
   getFindings: (requirementId?: string): Promise<Finding[]> => {
     const url = requirementId
@@ -101,4 +123,19 @@ export const api = {
 
   getLatestBenchmark: (): Promise<BenchmarkReport> =>
     fetchJson<BenchmarkReport>(`${API_BASE}/benchmark/latest`),
+
+  getImpactAnalysis: (): Promise<ImpactAnalysisReport> =>
+    fetchJson<ImpactAnalysisReport>(`${API_BASE}/impact/analysis`),
+
+  getRiskAnalysis: (): Promise<RiskAnalysisReport> =>
+    fetchJson<RiskAnalysisReport>(`${API_BASE}/risk/analysis`),
+
+  getAuditReport: (format: 'markdown' | 'json' = 'markdown'): Promise<AuditReportResponse> =>
+    fetchJson<AuditReportResponse>(`${API_BASE}/audit/report?format=${format}`),
+
+  getCopilotStatus: (): Promise<any> =>
+    fetchJson(`${API_BASE}/ai-copilot/status`),
+
+  getCopilotProposals: (requirementId: string): Promise<CopilotReport> =>
+    fetchJson<CopilotReport>(`${API_BASE}/ai-copilot/proposals/${encodeURIComponent(requirementId)}`),
 };

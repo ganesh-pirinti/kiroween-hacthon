@@ -50,6 +50,9 @@ Thumbs.db
 
 # Logs & Local Databases (preserve demo evidence artifacts)
 *.log
+*.db-shm
+*.db-wal
+*.db-journal
 
 # Environment & Secrets (Never commit credentials)
 .env

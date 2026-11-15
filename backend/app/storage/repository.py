@@ -90,6 +90,42 @@ class StorageRepository:
             cursor.execute(query, tuple(params))
             return [self._row_to_requirement(r) for r in cursor.fetchall()]
 
+    def count_requirements(self, status: Optional[VerificationStatus] = None) -> int:
+        """Return the number of requirements without loading full objects."""
+        query = "SELECT COUNT(*) FROM requirements"
+        params: list = []
+        if status:
+            query += " WHERE status = ?"
+            params.append(status.value)
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, tuple(params))
+            return cursor.fetchone()[0]
+
+    def count_verification_runs(self, requirement_id: Optional[str] = None) -> int:
+        """Return the number of verification runs without loading full objects."""
+        query = "SELECT COUNT(*) FROM verification_runs"
+        params: list = []
+        if requirement_id:
+            query += " WHERE requirement_id = ?"
+            params.append(requirement_id.upper())
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, tuple(params))
+            return cursor.fetchone()[0]
+
+    def count_findings(self, requirement_id: Optional[str] = None) -> int:
+        """Return the number of findings without loading full objects."""
+        query = "SELECT COUNT(*) FROM findings"
+        params: list = []
+        if requirement_id:
+            query += " WHERE requirement_id = ?"
+            params.append(requirement_id.upper())
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, tuple(params))
+            return cursor.fetchone()[0]
+
     def sync_catalog(self, catalog_path: Path) -> List[Requirement]:
         """Load and synchronize requirements from a JSON catalog file."""
         if not catalog_path.exists():

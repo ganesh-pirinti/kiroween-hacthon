@@ -125,14 +125,16 @@ def run_demonstration() -> None:
     # -------------------------------------------------------------
     # Scorecard
     # -------------------------------------------------------------
-    print("\n" + "=" * 76)
+    print("\n" + "=" * 88)
     print("  VERIFICATION EVIDENCE SCORECARD")
-    print("=" * 76)
-    print(f"  {'Run Target':<28} | {'Exit':<5} | {'Status':<10} | {'Finding Generated'}")
-    print("  " + "-" * 72)
-    print(f"  {'Vulnerable Fixture':<28} | {v_run.exit_code:<5} | {v_req.status.value:<10} | {'YES [CRITICAL]' if v_finding else 'NO'}")
-    print(f"  {'Corrected Implementation':<28} | {c_run.exit_code:<5} | {c_req.status.value:<10} | {'NO' if c_finding is None else 'YES'}")
-    print("=" * 76)
+    print("=" * 88)
+    print(f"  {'Run Target':<28} | {'Exit':<5} | {'Verification Outcome':<36} | {'Finding'}")
+    print("  " + "-" * 84)
+    v_outcome = f"{v_req.status.value} [DEFECT DETECTED — Expected Violation]" if v_run.exit_code == 1 else v_req.status.value
+    c_outcome = f"{c_req.status.value} [Clean Compliance]" if c_run.exit_code == 0 else c_req.status.value
+    print(f"  {'Vulnerable Fixture':<28} | {v_run.exit_code:<5} | {v_outcome:<36} | {'YES [CRITICAL]' if v_finding else 'NO'}")
+    print(f"  {'Corrected Implementation':<28} | {c_run.exit_code:<5} | {c_outcome:<36} | {'NO' if c_finding is None else 'YES'}")
+    print("=" * 88)
     print("\n  Demonstration complete. Real evidence is sealed in SQLite and evidence/ JSON files.")
 
 

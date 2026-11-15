@@ -122,11 +122,11 @@ cd ..
 ```
 
 ### Step 3: Run Full Automated Verification Suite
-Ensure all 60 tests pass before launching servers:
+Ensure all 79 tests pass before launching servers:
 ```powershell
 python -m pytest backend/tests -v
 ```
-*(Expected: 60 passed in ~26 seconds)*
+*(Expected: 79 passed in ~85-160 seconds)*
 
 ### Step 4: Launch Backend API Server
 In PowerShell Terminal 1:
@@ -142,7 +142,7 @@ In PowerShell Terminal 2:
 cd frontend
 npm run dev
 ```
-Open browser to: [http://localhost:5173](http://localhost:5173)
+Open browser to: [http://localhost:3000](http://localhost:3000)
 
 ---
 
@@ -256,9 +256,9 @@ To scientifically quantify why ordinary happy-path tests fail, we constructed an
 ## 9. Final Judging Readiness Checklist
 
 - [x] **Clean Installation**: `requirements.txt` and `package.json` install with zero legacy incompatibilities.
-- [x] **Backend Test Suite**: All 60 pytest tests pass (`60 passed in 26.56s`).
-- [x] **Frontend Unit Suite**: All 8 Vitest component tests pass (`8 passed in 5.02s`).
-- [x] **Production Build**: `npm run build` compiles clean bundle (`0 errors, 0 warnings`).
+- [x] **Backend Test Suite**: All 79 pytest tests pass (`79 passed in ~85-160s`).
+- [x] **Frontend Unit Suite**: All 15 Vitest component tests pass (`15 passed across 5 test suites`).
+- [x] **Production Build**: `npm run build` compiles clean bundle (`✓ built in 11.96s, 0 errors, 0 warnings`).
 - [x] **API Health**: `GET /api/v1/health` responds 200 with slogan `"AI says Done. We demand proof."`.
 - [x] **Primary Demonstration**: `python scripts/demonstrate_bug.py` demonstrates the vulnerable failure (VIOLATION) vs corrected pass (VERIFIED) in 5 seconds.
 - [x] **Benchmark Execution**: `python scripts/run_benchmark.py` computes exact metrics in 1.5ms.

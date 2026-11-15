@@ -113,6 +113,18 @@ export interface Evidence {
   };
 }
 
+export interface EvidenceVerificationResult {
+  evidence_id: string;
+  run_id: string;
+  requirement_id: string;
+  sha256_valid: boolean;
+  stored_digest: string;
+  computed_digest: string;
+  run_traced_in_database: boolean;
+  integrity_sealed: boolean;
+  verified_at: string;
+}
+
 export interface SystemHealth {
   status: string;
   service: string;
@@ -221,3 +233,88 @@ export interface BenchmarkReport {
   case_results: BenchmarkCaseResult[];
   methodology: Record<string, string>;
 }
+
+export interface ImpactRequirement {
+  requirement_id: string;
+  title: string;
+  verification_status: string;
+  freshness_status: 'FRESH' | 'STALE_CODE' | 'STALE_TEST' | 'UNBOUND' | 'NO_RUNS';
+  reason: string;
+  needs_rerun: boolean;
+  latest_run_id: string | null;
+  last_verified_at: string | null;
+  current_code_fingerprint: string;
+  stored_code_fingerprint: string | null;
+}
+
+export interface ImpactAnalysisReport {
+  timestamp: string;
+  target_source_path: string;
+  current_source_sha256: string;
+  current_test_sha256: string;
+  summary: {
+    total_requirements: number;
+    fresh_evidence: number;
+    stale_evidence: number;
+    unbound_requirements: number;
+    all_fresh: boolean;
+  };
+  requirements: ImpactRequirement[];
+}
+
+export interface RiskRequirement {
+  requirement_id: string;
+  title: string;
+  severity: string;
+  status: string;
+  risk_score: number;
+  risk_category: 'CRITICAL RISK' | 'HIGH RISK' | 'MODERATE RISK' | 'LOW RISK';
+  badge_color: 'red' | 'amber' | 'blue' | 'emerald';
+  contributing_factors: string[];
+  criteria_coverage: number;
+  uncovered_criteria: number;
+  freshness: string;
+}
+
+export interface RecommendedAction {
+  priority: number;
+  requirement_id: string;
+  urgency: string;
+  action: string;
+  detail: string;
+}
+
+export interface RiskAnalysisReport {
+  timestamp: string;
+  overall_risk_posture: string;
+  highest_priority_action: RecommendedAction | null;
+  action_backlog: RecommendedAction[];
+  risk_breakdown: RiskRequirement[];
+}
+
+export interface AuditReportResponse {
+  format: 'markdown' | 'json';
+  generated_at: string;
+  content: any;
+}
+
+export interface CopilotProposal {
+  proposal_id: string;
+  criterion_id: string;
+  type: string;
+  title: string;
+  description: string;
+  suggested_test_path: string;
+  status: string;
+  evidential_weight: string;
+}
+
+export interface CopilotReport {
+  requirement_id: string;
+  title: string;
+  is_unverified: boolean;
+  total_proposals: number;
+  proposals: CopilotProposal[];
+  integrity_notice: string;
+}
+

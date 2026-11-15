@@ -112,7 +112,7 @@ class SubprocessRunner:
     - Hard process execution timeout.
     """
 
-    def __init__(self, project_root: Path, timeout_seconds: int = 30) -> None:
+    def __init__(self, project_root: Path, timeout_seconds: int = 45) -> None:
         self.project_root = project_root.resolve()
         self.timeout_seconds = timeout_seconds
         self.payment_code = self.project_root / "backend" / "app" / "payment.py"
@@ -175,13 +175,20 @@ class SubprocessRunner:
         ]
         cmd_str = " ".join(cmd_args)
 
-        # Sanitized environment
+        # Sanitized environment: only safe system and runtime paths, zero secret leaks
         clean_env = {
             "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+            "WINDIR": os.environ.get("WINDIR", os.environ.get("SYSTEMROOT", "")),
+            "SYSTEMDRIVE": os.environ.get("SYSTEMDRIVE", "C:"),
+            "USERPROFILE": os.environ.get("USERPROFILE", ""),
+            "LOCALAPPDATA": os.environ.get("LOCALAPPDATA", ""),
+            "APPDATA": os.environ.get("APPDATA", ""),
             "PATH": os.environ.get("PATH", ""),
             "PYTHONPATH": str(self.project_root),
             "TEMP": os.environ.get("TEMP", ""),
             "TMP": os.environ.get("TMP", ""),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONUNBUFFERED": "1",
         }
 
         code_fp = calculate_sha256(self.payment_code)
@@ -196,6 +203,7 @@ class SubprocessRunner:
             process = subprocess.run(
                 cmd_args,
                 cwd=str(self.project_root),
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout_seconds,

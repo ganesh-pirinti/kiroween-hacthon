@@ -1,15 +1,15 @@
 {
-  "run_id": "run-20261113-a4eca9b6",
+  "run_id": "run-20261115-f9184b97",
   "requirement_id": "PAYMENT-004",
   "verdict": "VERIFIED",
   "exit_code": 0,
   "command": "C:\\Users\\Abhi\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m pytest backend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged -v --tb=short -p no:cacheprovider",
-  "start_time": "2026-11-13T20:44:48.347706+00:00",
-  "end_time": "2026-11-13T20:44:49.710160+00:00",
-  "concise_output": "============================== 1 passed in 0.07s ==============================",
+  "start_time": "2026-11-15T17:44:20.647469+00:00",
+  "end_time": "2026-11-15T17:44:26.004830+00:00",
+  "concise_output": "============================== 1 passed in 0.22s ==============================",
   "finding": null,
   "code_fingerprint": "a1bfe7884b6318d3a67c2d11beaa70583fe60bc70ddfbb31a946a137d325fa2f",
   "test_fingerprint": "76b4295077219b617d6e4f13808dc054b8cd45d3ccf0ecff0dd038400d380898",
-  "sha256": "6bfc0cf05f522a79199c05bbc22c1f14ac7b44f531866a31bafec8907e32c2ad",
-  "raw_stdout": "============================= test session starts =============================\nplatform win32 -- Python 3.11.9, pytest-9.2.0, pluggy-1.7.0 -- C:\\Users\\Abhi\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\nrootdir: C:\\Users\\Abhi\\Desktop\\kiro hackthon\nconfigfile: pytest.ini\nplugins: anyio-4.15.1\ncollecting ... collected 1 item\n\nbackend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged PASSED [100%]\n\n============================== 1 passed in 0.07s ==============================\n"
+  "sha256": "be87d00f910e066452b78ee0914c7a47b3b6ed57b617dd49927a805c5a3e426a",
+  "raw_stdout": "============================= test session starts =============================\nplatform win32 -- Python 3.11.9, pytest-9.2.0, pluggy-1.7.0 -- C:\\Users\\Abhi\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\nrootdir: C:\\Users\\Abhi\\Desktop\\kiro hackthon\nconfigfile: pytest.ini\nplugins: anyio-4.15.1\ncollecting ... collected 1 item\n\nbackend/tests/test_payment.py::TestPaymentAdversarial::test_overdraft_transfer_rejected_and_balances_unchanged PASSED [100%]\n\n============================== 1 passed in 0.22s ==============================\n"
 }

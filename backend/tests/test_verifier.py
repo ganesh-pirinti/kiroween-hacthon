@@ -17,9 +17,44 @@ from backend.app.main import app
 from backend.app.verifier import Verifier
 
 
+PRODUCTION_DB_PATH = Path("evidence/evidence.db")
+
+
+@pytest.fixture(autouse=True)
+def guard_production_database():
+    """Regression guard: ensures no test in this module modifies evidence/evidence.db."""
+    initial_exists = PRODUCTION_DB_PATH.exists()
+    initial_mtime = PRODUCTION_DB_PATH.stat().st_mtime_ns if initial_exists else None
+    initial_size = PRODUCTION_DB_PATH.stat().st_size if initial_exists else None
+
+    yield
+
+    if initial_exists:
+        assert PRODUCTION_DB_PATH.exists(), "Regression: Production database was deleted during test!"
+        current_mtime = PRODUCTION_DB_PATH.stat().st_mtime_ns
+        current_size = PRODUCTION_DB_PATH.stat().st_size
+        assert current_size == initial_size, (
+            f"Regression: Production database size changed from {initial_size} to {current_size}! "
+            "A test in test_verifier.py accessed the production database instead of an isolated temporary database."
+        )
+        assert current_mtime == initial_mtime, (
+            f"Regression: Production database was written to! mtime changed from {initial_mtime} to {current_mtime}. "
+            "A test in test_verifier.py accessed the production database instead of an isolated temporary database."
+        )
+
+
 @pytest.fixture
-def test_client() -> TestClient:
-    """Fixture providing a FastAPI TestClient."""
+def test_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """Fixture providing a FastAPI TestClient wired to an isolated temporary database."""
+    isolated_db = tmp_path / "test_api_endpoints.db"
+    isolated_store = EvidenceStore(db_path=isolated_db)
+    isolated_verifier = Verifier(evidence_store=isolated_store, base_dir=Path.cwd())
+
+    import backend.app.main as main_mod
+
+    monkeypatch.setattr(main_mod, "legacy_evidence_store", isolated_store)
+    monkeypatch.setattr(main_mod, "legacy_verifier", isolated_verifier)
+
     return TestClient(app)
 
 
@@ -172,3 +207,34 @@ class TestApiEndpoints:
         detail = detail_res.json()
         assert detail["evidence_id"] == evidence_id
         assert detail["verdict"] == "PASS"
+
+    def test_api_endpoints_do_not_touch_production_database(self, test_client: TestClient) -> None:
+        """Regression test ensuring API endpoints write exclusively to isolated test database."""
+        if not PRODUCTION_DB_PATH.exists():
+            pytest.skip("Production database does not exist to verify isolation")
+
+        initial_size = PRODUCTION_DB_PATH.stat().st_size
+        initial_mtime = PRODUCTION_DB_PATH.stat().st_mtime_ns
+
+        # Trigger verification via API
+        verify_res = test_client.post("/api/verify/PAYMENT-004")
+        assert verify_res.status_code == 200
+        ev_id = verify_res.json()["evidence_id"]
+
+        # Confirm evidence exists in the isolated test database
+        detail_res = test_client.get(f"/api/evidence/{ev_id}")
+        assert detail_res.status_code == 200
+        assert detail_res.json()["evidence_id"] == ev_id
+
+        # Confirm production DB size and mtime are strictly unchanged
+        assert PRODUCTION_DB_PATH.stat().st_size == initial_size
+        assert PRODUCTION_DB_PATH.stat().st_mtime_ns == initial_mtime
+
+        # Confirm the evidence record was NOT written to the production database
+        import sqlite3
+        conn = sqlite3.connect(str(PRODUCTION_DB_PATH))
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM evidence_records WHERE evidence_id = ?", (ev_id,))
+        count_in_prod = cursor.fetchone()[0]
+        conn.close()
+        assert count_in_prod == 0, f"Evidence record {ev_id} was improperly written to production DB!"
