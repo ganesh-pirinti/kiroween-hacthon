@@ -1,0 +1,19 @@
+{
+  "clientName": "kiro-ide",
+  "policyPreset": [
+    "edit-workspace"
+  ],
+  "shellType": "powershell",
+  "settings": {
+    "workflows": {
+      "enabled": false
+    },
+    "goal": {
+      "enabled": false
+    },
+    "memory": {
+      "mode": "disabled",
+      "reflection": false
+    }
+  }
+}

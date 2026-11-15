@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "1.0.0",
+  "dataModelVersion": 1,
+  "id": "sess_3d0e437f-a8c9-498e-a213-d2b9fbcde3aa",
+  "title": "GHOST PROTOCOL Security Fixes",
+  "agentMode": "vibe",
+  "workspacePaths": [
+    "c:\\Users\\Abhi\\Desktop\\kiro hackthon"
+  ],
+  "rootPaths": [
+    "c:\\Users\\Abhi\\Desktop\\kiro hackthon"
+  ],
+  "createdAt": "2026-11-14T06:54:22.520Z",
+  "lastModifiedAt": "2026-11-14T11:01:50.105Z",
+  "modelId": "claude-sonnet-4.5",
+  "autopilot": true,
+  "approveForMe": true,
+  "workflowLaunch": "when-asked",
+  "contextSnapshotModelDisplay": {
+    "modelId": "claude-sonnet-4.5",
+    "display": "Claude Sonnet 4.5"
+  },
+  "semanticReviewEnabled": true,
+  "disableAutoCompaction": false,
+  "ftaEnabled": false,
+  "workflowsEnabled": false,
+  "specPlanEnabled": false,
+  "specWorkflow": "quick",
+  "specSkipClarificationEnabled": true,
+  "memoryConfig": {
+    "mode": "disabled",
+    "reflection": false
+  },
+  "memoryConfigSource": "explicit",
+  "description": "All 4 fixes implemented and verified. Full backend suite: 69 passed, 0 failed.",
+  "status": "idle",
+  "_meta": {
+    "kiro": {
+      "policyPreset": [
+        "edit-workspace"
+      ],
+      "shellType": "powershell",
+      "settings": {
+        "workflows": {
+          "enabled": false
+        },
+        "goal": {
+          "enabled": false
+        },
+        "memory": {
+          "mode": "disabled",
+          "reflection": false
+        }
+      }
+    }
+  }
+}
